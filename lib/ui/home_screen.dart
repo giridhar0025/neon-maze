@@ -123,7 +123,9 @@ class HomeScreen extends StatelessWidget {
                                     const SizedBox(height: 18),
                                     Center(
                                       child: Text(
-                                        'Neon Maze  ·  v1.3  ·  offline & ad-free',
+                                        // No version string here: it was hard-coded
+                                        // and went stale on every release.
+                                        'Neon Maze  ·  offline & ad-free',
                                         style: AppText.body(
                                           11,
                                           color: AppColors.inkFaint.withValues(alpha: 0.8),

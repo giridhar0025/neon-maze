@@ -74,6 +74,7 @@ class _GameScreenState extends State<GameScreen>
   int _lastHudBucket = -1;
   Size? _builtSize;
   int? _builtLevel;
+  bool? _builtColorblind;
   Offset _drag = Offset.zero;
   final Set<LogicalKeyboardKey> _keys = <LogicalKeyboardKey>{};
   bool _attemptRecorded = false;
@@ -108,6 +109,11 @@ class _GameScreenState extends State<GameScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+      // Leaving the app must not leave a stale steering input behind: a held
+      // key would otherwise keep the marble accelerating on resume.
+      _keys.clear();
+      _drag = Offset.zero;
+      _tilt.feedFallback(Offset.zero);
       if (_phase == GamePhase.playing) {
         setState(() => _phase = GamePhase.paused);
       }
@@ -401,9 +407,12 @@ class _GameScreenState extends State<GameScreen>
           builder: (context, constraints) {
             final size = Size(constraints.maxWidth, constraints.maxHeight);
             final dpr = MediaQuery.devicePixelRatioOf(context);
-            if (_builtSize != size || _builtLevel != _spec.id) {
+            if (_builtSize != size ||
+                _builtLevel != _spec.id ||
+                _builtColorblind != settings.colorblind) {
               _builtSize = size;
               _builtLevel = _spec.id;
+              _builtColorblind = settings.colorblind;
               _renderer.build(
                 level: _level,
                 size: size,
@@ -514,9 +523,13 @@ class _GameScreenState extends State<GameScreen>
   }
 
   Widget _pauseButton() {
+    // Pause only means something while the marble is actually running: during
+    // the countdown, the fall animation or the win screen the button is dead,
+    // so it is disabled instead of silently doing nothing.
+    final canPause = _phase == GamePhase.playing || _phase == GamePhase.paused;
     return _GlassIconButton(
       icon: _phase == GamePhase.paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-      onTap: _phase == GamePhase.won ? null : _togglePause,
+      onTap: canPause ? _togglePause : null,
     );
   }
 

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../game/levels.dart';
+
 class LevelRecord {
   const LevelRecord({required this.stars, required this.bestMs, this.plays = 0});
 
@@ -226,14 +228,17 @@ class AppStore extends ChangeNotifier {
 
   int bestMsFor(int levelId) => _records[levelId]?.bestMs ?? 0;
 
-  /// Testing build: every level is open so layouts and mechanics can be
-  /// reached without grinding the unlock chain. Flip this off for release.
-  static const bool unlockAllLevels = true;
+  /// Every level is open only in an internal testing build:
+  /// `flutter build apk --release --dart-define=NM_UNLOCK_ALL=true`.
+  /// A normal store build leaves this false, so progression is enforced.
+  static const bool unlockAllLevels = bool.fromEnvironment('NM_UNLOCK_ALL');
 
-  /// Levels unlock sequentially in release; testing opens the full catalog.
+  /// Levels unlock sequentially; a level opens once every earlier level is
+  /// cleared, so the player always has exactly one "next" level to play.
   bool isUnlocked(int levelId) {
     if (unlockAllLevels) return true;
     if (levelId <= 0) return true;
+    if (levelId >= LevelCatalog.total) return false;
     // Every level up to the first uncleared one is open, plus one beyond it.
     var streak = 0;
     while (_records.containsKey(streak) && (_records[streak]?.stars ?? 0) > 0) {
@@ -249,7 +254,9 @@ class AppStore extends ChangeNotifier {
     while (_records.containsKey(next) && (_records[next]?.stars ?? 0) > 0) {
       next++;
     }
-    return next;
+    // Everything cleared: stay on the final level instead of pointing past the
+    // end of the catalog.
+    return next.clamp(0, LevelCatalog.total - 1);
   }
 
   Future<void> markTutorialSeen() async {

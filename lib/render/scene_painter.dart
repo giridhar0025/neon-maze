@@ -417,6 +417,13 @@ class BoardRenderer {
     // The neon body: one thick round-capped line per segment, extended by half
     // the wall thickness so corners and Ts close up completely. Three passes
     // give the wall a soft bloom, a saturated core and a hot centre line.
+    //
+    // Everything below is clipped to the casing. The caps and the extension
+    // are what close the joints, but at a dead end they would poke out of the
+    // wall's footprint into the corridor — the clip makes the wall stop
+    // exactly where its collision box stops.
+    canvas.save();
+    canvas.clipPath(shell, doAntiAlias: true);
     for (final paint in [tube, core, hot]) {
       for (final segment in segments) {
         final rect = view.toScreenRect(segment);
@@ -430,6 +437,7 @@ class BoardRenderer {
         canvas.drawLine(a, b, paint);
       }
     }
+    canvas.restore();
   }
 }
 

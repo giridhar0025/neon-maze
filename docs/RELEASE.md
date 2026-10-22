@@ -5,7 +5,7 @@
 | Field | Current value | Change before publishing |
 |---|---|---|
 | Application id | `dev.pulichara.neon_maze` | Use a domain you control, e.g. `com.yourstudio.neonmaze` |
-| Version | `1.3.2+6` (`pubspec.yaml`) | Bump `versionName+versionCode` for every upload |
+| Version | `1.3.3+7` (`pubspec.yaml`) | Bump `versionName+versionCode` for every upload |
 | Display name | Neon Maze | Android label + iOS `CFBundleDisplayName` already set |
 | Target SDK | 36 | Keep current for Play requirements |
 
