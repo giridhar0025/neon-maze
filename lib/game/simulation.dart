@@ -43,6 +43,13 @@ class Simulation {
   static const double exitRadius = 0.30;
   static const double portalRadius = 0.26;
 
+  /// Bumper feel. A post is a rubber spring: it returns more normal speed than
+  /// it takes, dampens the sideways component, and always kicks the marble
+  /// clear at [bumperMinExit].
+  static const double bumperRestitution = 1.32;
+  static const double bumperGrip = 0.88;
+  static const double bumperMinExit = 2.2;
+
   final LevelRuntime level;
   final double ballRadius;
   final List<Rect> wallBoxes;
@@ -63,6 +70,12 @@ class Simulation {
 
   final Set<int> collected = <int>{};
   final List<SimEvent> events = <SimEvent>[];
+
+  /// Per-bumper freshness of the last hit (1 = just hit, 0 = settled). Render
+  /// only: it drives the flash and spring compression so a hit is visible even
+  /// when two posts are close enough to share one haptic.
+  final List<double> bumperFlash = <double>[];
+
   final List<Offset> trail = <Offset>[];
   double _trailClock = 0;
   double _bumperCooldown = 0;
@@ -102,6 +115,9 @@ class Simulation {
     for (final wall in level.breakables) {
       wall.broken = false;
     }
+    bumperFlash
+      ..clear()
+      ..addAll(List<double>.filled(level.bumpers.length, 0.0));
     trail
       ..clear()
       ..add(ball);
@@ -145,6 +161,10 @@ class Simulation {
     portalCooldown = max(0, portalCooldown - h);
     invulnerable = max(0, invulnerable - h);
     _bumperCooldown = max(0, _bumperCooldown - h);
+    // A hit flash fades over roughly a quarter second.
+    for (var i = 0; i < bumperFlash.length; i++) {
+      if (bumperFlash[i] > 0) bumperFlash[i] = max(0, bumperFlash[i] - h * 4);
+    }
 
     final inIce = _insideAny(level.ice);
     final inTar = _insideAny(level.tar);
@@ -351,27 +371,55 @@ class Simulation {
     return impact;
   }
 
+  /// Spring posts. The hit is resolved as a proper impulse instead of a raw
+  /// velocity flip:
+  ///  * the normal component is reflected with slightly more energy, so the
+  ///    marble leaves faster than it arrived (that is the "pop"),
+  ///  * the tangential component is scrubbed by the rubber face, so a glancing
+  ///    hit bends the line instead of dead-stopping it,
+  ///  * a minimum departure speed guarantees even a slow nudge gets kicked
+  ///    clear, and
+  ///  * the result is clamped to [maxSpeed] so a hit can never slingshot the
+  ///    marble across the board.
   void _resolveBumpers() {
-    for (final b in level.bumpers) {
+    for (var i = 0; i < level.bumpers.length; i++) {
+      final b = level.bumpers[i];
       final d = ball - b.center;
       final dist = d.distance;
       final minDist = b.radius + ballRadius;
       if (dist >= minDist) continue;
 
-      final n = dist < 1e-5 ? const Offset(1, 0) : d / dist;
-      ball = b.center + n * minDist;
+      // Degenerate case: the centre is exactly under the marble. Push it out
+      // along its own travel direction, or +x when it is at rest.
+      final n = dist > 1e-5
+          ? d / dist
+          : (speed > 1e-4 ? -velocity / speed : const Offset(1, 0));
+
+      ball = b.center + n * (minDist + 0.0002);
+
       final vn = velocity.dx * n.dx + velocity.dy * n.dy;
+      final approach = -vn;
+      // Only an incoming contact is an impulse; if the marble is already
+      // separating (for example right after depenetration) keep its velocity,
+      // otherwise the post would suck it back in.
       if (vn < 0) {
-        velocity -= n * (vn * 1.7);
+        final tangent = velocity - n * vn;
+        velocity = n * (approach * bumperRestitution) + tangent * bumperGrip;
       }
-      // Keep bumpers lively without launching the marble across the board.
-      final sp = speed;
-      if (sp < 1.25) velocity += n * (1.25 - sp);
+
+      final departure = velocity.dx * n.dx + velocity.dy * n.dy;
+      if (departure < bumperMinExit) {
+        velocity += n * (bumperMinExit - departure);
+      }
+
       if (speed > maxSpeed) velocity = velocity * (maxSpeed / speed);
 
-      if (_bumperCooldown == 0) {
+      bumperFlash[i] = 1.0;
+      // A bounce that carries no real approach speed is the marble settling on
+      // the post, not a hit worth haptics or sparks.
+      if (approach > 0.2 && _bumperCooldown == 0) {
         _bumperCooldown = 0.12;
-        events.add(SimEvent(SimEventType.bumper, ball, speed));
+        events.add(SimEvent(SimEventType.bumper, ball, approach));
       }
     }
   }

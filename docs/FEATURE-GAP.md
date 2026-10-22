@@ -41,7 +41,7 @@ beyond a touch fallback.
 |---|---|
 | Energy orbs (collect all to open exit) | Turns "walk to exit" into routing decisions |
 | Pulse gates | Timing puzzle: solid barriers cycle dark and become passable |
-| Bumpers | Redirects at speed, enables shortcut play |
+| Bumpers | Spring posts: they return more speed than they absorb, so a hit redirects the run instead of ending it |
 | Portals | Spatial reasoning, signature "wow" moment |
 | One-way flow panels | Route planning: enter with the arrows or not at all |
 | Conveyor belts | Directional force changes the line and rewards reading the floor |

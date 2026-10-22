@@ -940,6 +940,15 @@ class ScenePainter extends CustomPainter {
           : 0.5 + 0.5 * sin(sim.visualTime * 2.8 + i * 1.6);
       final color = settings.colorblind ? AppColors.amber : theme.b;
 
+      // Hit feedback. `hit` fades 1 -> 0 over ~0.25s: the ring snaps outward,
+      // the core compresses, and a shockwave ring expands and dies out. The
+      // strength is reduced (not removed) when reduce-motion is on.
+      final hit = i < sim.bumperFlash.length
+          ? sim.bumperFlash[i] * (settings.reduceMotion ? 0.45 : 1.0)
+          : 0.0;
+      final ringR = r * (1 + hit * 0.20);
+      final coreR = r * (0.24 - hit * 0.09);
+
       canvas.drawCircle(
         c,
         r * 1.25,
@@ -949,9 +958,9 @@ class ScenePainter extends CustomPainter {
       );
       canvas.drawCircle(
         c,
-        r * (1.3 + pulse * 0.12),
+        ringR * (1.3 + pulse * 0.12),
         Paint()
-          ..color = color.withValues(alpha: 0.12 + 0.10 * pulse)
+          ..color = color.withValues(alpha: 0.12 + 0.10 * pulse + 0.30 * hit)
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.50),
       );
       canvas.drawCircle(
@@ -960,27 +969,40 @@ class ScenePainter extends CustomPainter {
         Paint()
           ..shader = RadialGradient(
             colors: [
-              color.withValues(alpha: 0.28),
+              color.withValues(alpha: 0.28 + 0.30 * hit),
               const Color(0xFF07101E),
             ],
           ).createShader(Rect.fromCircle(center: c, radius: r)),
       );
       canvas.drawCircle(
         c,
-        r,
+        ringR,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
+          ..strokeWidth = 2 + hit * 1.6
           ..color = color.withValues(alpha: 0.82),
       );
       canvas.drawCircle(
         c,
-        r * 0.64,
+        ringR * 0.64,
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.2
-          ..color = Colors.white.withValues(alpha: 0.28 + 0.15 * pulse),
+          ..color = Colors.white.withValues(alpha: 0.28 + 0.15 * pulse + 0.35 * hit),
       );
+
+      // Expanding shockwave, only while the flash is fresh.
+      if (hit > 0.01) {
+        final spread = 1.0 + (1 - hit) * 0.85;
+        canvas.drawCircle(
+          c,
+          r * spread,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.8 * hit
+            ..color = color.withValues(alpha: 0.55 * hit),
+        );
+      }
 
       // Spring spokes.
       final spoke = Paint()
@@ -996,13 +1018,16 @@ class ScenePainter extends CustomPainter {
 
       canvas.drawCircle(
         c,
-        r * 0.24,
+        coreR,
         Paint()..color = color.withValues(alpha: 0.90),
       );
       canvas.drawCircle(
         c,
-        r * 0.12,
-        Paint()..color = Colors.white.withValues(alpha: 0.85),
+        coreR * 0.5,
+        Paint()
+          ..color = Colors.white.withValues(
+            alpha: (0.85 + 0.15 * hit).clamp(0.0, 1.0),
+          ),
       );
     }
   }
