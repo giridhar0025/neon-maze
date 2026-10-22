@@ -107,9 +107,9 @@ void main() {
 
   test('maze sizes stay inside a large-board range', () {
     for (final spec in LevelCatalog.all) {
-      expect(spec.cols, inInclusiveRange(5, 20));
-      expect(spec.rows, inInclusiveRange(5, 22));
-      expect(spec.cols * spec.rows, lessThan(500));
+      expect(spec.cols, inInclusiveRange(5, 24));
+      expect(spec.rows, inInclusiveRange(5, 27));
+      expect(spec.cols * spec.rows, lessThan(700));
       expect(spec.seed, greaterThan(0));
       expect(spec.difficulty, inInclusiveRange(1, 10));
       expect(Dir.values.length, 4);

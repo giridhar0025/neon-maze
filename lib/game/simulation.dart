@@ -301,7 +301,7 @@ class Simulation {
         restitution: 0.30,
         tangentialLoss: 0.01,
       );
-      if (impact < 2.0) continue;
+      if (impact < 2.6) continue;
       wall.broken = true;
       velocity = incoming * 0.78;
       events.add(SimEvent(SimEventType.breakWall, wall.rect.center, impact));
@@ -426,7 +426,9 @@ class Simulation {
 
   void _resolveSpecials() {
     for (final h in level.holes) {
-      if ((ball - h.center).distance < h.radius * 0.82) {
+      // A wider capture radius: clipping the rim of a hole now drops the
+      // marble instead of letting it skate past.
+      if ((ball - h.center).distance < h.radius * 0.88) {
         fell = true;
         events.add(SimEvent(SimEventType.fall, ball, 1));
         return;

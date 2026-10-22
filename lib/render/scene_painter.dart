@@ -384,315 +384,51 @@ class BoardRenderer {
         .toList();
     final accent = theme.a;
 
-    // A wall network is only as good as its joins. Collect every segment
-    // endpoint, then put a mechanical collar on ends, corners, Ts and crosses.
-    final endpoints = <String, List<bool>>{};
-    void addEndpoint(Offset point, bool horizontal) {
-      final key = '${(point.dx * 1000).round()}:${(point.dy * 1000).round()}';
-      endpoints.putIfAbsent(key, () => <bool>[]).add(horizontal);
-    }
+    // Plain walls: one solid casing, one continuous neon core. No panel seams,
+    // divider ribs, joint collars or bolts — a wall is a single filled form.
+    final fill = Paint()..color = const Color(0xFF060C15);
+    final halo = Paint()
+      ..color = accent.withValues(alpha: 0.20)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.34));
+    final tube = Paint()
+      ..color = accent.withValues(alpha: 0.38)
+      ..strokeWidth = view.px(t * 1.12)
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.16));
+    final core = Paint()
+      ..color = accent
+      ..strokeWidth = view.px(t * 0.88)
+      ..strokeCap = StrokeCap.round;
+    final hot = Paint()
+      ..color = Colors.white.withValues(alpha: 0.50)
+      ..strokeWidth = max(1.0, view.px(t * 0.26))
+      ..strokeCap = StrokeCap.round;
+    final half = view.px(t * 0.5);
 
-    for (final segment in allSegments) {
-      final horizontal = segment.width >= segment.height;
-      final a = horizontal
-          ? Offset(segment.left, segment.center.dy)
-          : Offset(segment.center.dx, segment.top);
-      final b = horizontal
-          ? Offset(segment.right, segment.center.dy)
-          : Offset(segment.center.dx, segment.bottom);
-      addEndpoint(a, horizontal);
-      addEndpoint(b, horizontal);
-    }
-
-    final joints = <Offset>[];
-    final jointKeys = <String>{};
-    for (final entry in endpoints.entries) {
-      final directions = entry.value;
-      final isJoint = directions.length == 1 ||
-          directions.length >= 3 ||
-          (directions.length == 2 && directions[0] != directions[1]);
-      if (!isJoint) continue;
-      jointKeys.add(entry.key);
-      final parts = entry.key.split(':');
-      joints.add(Offset(
-        int.parse(parts[0]) / 1000.0,
-        int.parse(parts[1]) / 1000.0,
-      ));
-    }
-
-    final bloom = Paint()
-      ..color = accent.withValues(alpha: 0.15)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.20));
-    final shadow = Paint()
-      ..color = Colors.black.withValues(alpha: 0.52)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.12));
-    final jointSize = view.px(t * 1.9);
-
-    // 1. Ambient bloom behind the network.
+    // The casing: every wall rect goes into one path, so adjacent edges merge
+    // into a single solid shape with no gaps to read as dividers.
+    final shell = Path();
     for (final segment in segments) {
-      final rect = view.toScreenRect(segment);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          rect.deflate(1),
-          Radius.circular(max(2, view.px(t * 0.4))),
-        ),
-        bloom,
-      );
+      shell.addRect(view.toScreenRect(segment));
     }
+    canvas.drawPath(shell, halo);
+    canvas.drawPath(shell, fill);
 
-    // 2. Continuous dark backing rail plus an inset panel for every cell
-    // edge. The seam between panels is what makes a long wall read as built
-    // sections instead of one flat fill.
-    for (final segment in segments) {
-      final rect = view.toScreenRect(segment);
-      final horizontal = segment.width >= segment.height;
-      final radius = Radius.circular(max(1.5, view.px(t * 0.34)));
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect.inflate(0.8), radius),
-        Paint()..color = const Color(0xFF04070E),
-      );
-
-      final seam = max(2.0, view.px(0.045));
-      final panel = horizontal
-          ? Rect.fromLTRB(
-              rect.left + seam,
-              rect.top + 1.0,
-              rect.right - seam,
-              rect.bottom - 1.0,
-            )
-          : Rect.fromLTRB(
-              rect.left + 1.0,
-              rect.top + seam,
-              rect.right - 1.0,
-              rect.bottom - seam,
-            );
-      final rr = RRect.fromRectAndRadius(panel, radius);
-      final inner = Rect.fromLTRB(
-        panel.left + 1.1,
-        panel.top + 1.1,
-        max(panel.left + 2.1, panel.right - 1.1),
-        max(panel.top + 2.1, panel.bottom - 1.1),
-      );
-      final alternate = (segment.center.dx + segment.center.dy).round().isEven;
-      final topTone = alternate
-          ? Color.lerp(const Color(0xFF263C67), accent, 0.10)!
-          : Color.lerp(const Color(0xFF203355), accent, 0.06)!;
-
-      canvas.drawRRect(rr.shift(Offset(0, view.px(0.045))), shadow);
-      canvas.drawRRect(
-        rr,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [topTone, const Color(0xFF0A1120)],
-          ).createShader(panel),
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(inner, radius),
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color.lerp(const Color(0xFF111C34), accent, 0.05)!,
-              const Color(0xFF050912),
-            ],
-          ).createShader(inner),
-      );
-      canvas.drawRRect(
-        rr,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1
-          ..color = accent.withValues(alpha: 0.32),
-      );
-
-      // Bright divider ribs at both panel ends.
-      final rib = Paint()
-        ..color = accent.withValues(alpha: 0.55)
-        ..strokeWidth = 1.2
-        ..strokeCap = StrokeCap.round;
-      if (horizontal) {
-        canvas.drawLine(
-          Offset(panel.left + 0.5, panel.top + 1.1),
-          Offset(panel.left + 0.5, panel.bottom - 1.1),
-          rib,
-        );
-        canvas.drawLine(
-          Offset(panel.right - 0.5, panel.top + 1.1),
-          Offset(panel.right - 0.5, panel.bottom - 1.1),
-          rib,
-        );
-      } else {
-        canvas.drawLine(
-          Offset(panel.left + 1.1, panel.top + 0.5),
-          Offset(panel.right - 1.1, panel.top + 0.5),
-          rib,
-        );
-        canvas.drawLine(
-          Offset(panel.left + 1.1, panel.bottom - 0.5),
-          Offset(panel.right - 1.1, panel.bottom - 0.5),
-          rib,
-        );
+    // The neon body: one thick round-capped line per segment, extended by half
+    // the wall thickness so corners and Ts close up completely. Three passes
+    // give the wall a soft bloom, a saturated core and a hot centre line.
+    for (final paint in [tube, core, hot]) {
+      for (final segment in segments) {
+        final rect = view.toScreenRect(segment);
+        final horizontal = segment.width >= segment.height;
+        final a = horizontal
+            ? Offset(rect.left - half, rect.center.dy)
+            : Offset(rect.center.dx, rect.top - half);
+        final b = horizontal
+            ? Offset(rect.right + half, rect.center.dy)
+            : Offset(rect.center.dx, rect.bottom + half);
+        canvas.drawLine(a, b, paint);
       }
-    }
-
-    // 3. Joint collars fill the corners and make the network read as built,
-    // not painted.
-    for (final joint in joints) {
-      final c = view.toScreen(joint);
-      final rect = Rect.fromCenter(center: c, width: jointSize, height: jointSize);
-      final rr = RRect.fromRectAndRadius(
-        rect,
-        Radius.circular(jointSize * 0.24),
-      );
-      canvas.drawRRect(rr.shift(Offset(0, view.px(0.04))), shadow);
-      canvas.drawRRect(
-        rr,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color.lerp(const Color(0xFF2A416F), accent, 0.14)!,
-              const Color(0xFF080D18),
-            ],
-          ).createShader(rect),
-      );
-      canvas.drawRRect(
-        rr,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.1
-          ..color = accent.withValues(alpha: 0.48),
-      );
-      // Four edge slots make the collar feel like a machined bracket.
-      final slot = Paint()
-        ..color = Colors.black.withValues(alpha: 0.55)
-        ..strokeWidth = 1;
-      canvas.drawLine(
-        Offset(rect.left + jointSize * 0.16, rect.center.dy),
-        Offset(rect.left + jointSize * 0.30, rect.center.dy),
-        slot,
-      );
-      canvas.drawLine(
-        Offset(rect.right - jointSize * 0.30, rect.center.dy),
-        Offset(rect.right - jointSize * 0.16, rect.center.dy),
-        slot,
-      );
-      canvas.drawLine(
-        Offset(rect.center.dx, rect.top + jointSize * 0.16),
-        Offset(rect.center.dx, rect.top + jointSize * 0.30),
-        slot,
-      );
-      canvas.drawLine(
-        Offset(rect.center.dx, rect.bottom - jointSize * 0.30),
-        Offset(rect.center.dx, rect.bottom - jointSize * 0.16),
-        slot,
-      );
-    }
-
-    // 4. Long-axis light tube on each segment.
-    for (final segment in segments) {
-      final rect = view.toScreenRect(segment);
-      final horizontal = segment.width >= segment.height;
-      final seam = max(2.0, view.px(0.045));
-      final coreStart = horizontal
-          ? Offset(rect.left + seam + 1, rect.center.dy)
-          : Offset(rect.center.dx, rect.top + seam + 1);
-      final coreEnd = horizontal
-          ? Offset(rect.right - seam - 1, rect.center.dy)
-          : Offset(rect.center.dx, rect.bottom - seam - 1);
-      canvas.drawLine(
-        coreStart,
-        coreEnd,
-        Paint()
-          ..color = accent.withValues(alpha: 0.28)
-          ..strokeWidth = max(1.0, view.px(t * 1.45))
-          ..strokeCap = StrokeCap.butt
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.10)),
-      );
-      canvas.drawLine(
-        coreStart,
-        coreEnd,
-        Paint()
-          ..color = accent.withValues(alpha: 0.90)
-          ..strokeWidth = max(1.0, view.px(t * 0.42))
-          ..strokeCap = StrokeCap.butt,
-      );
-      canvas.drawLine(
-        coreStart,
-        coreEnd,
-        Paint()
-          ..color = Colors.white.withValues(alpha: 0.55)
-          ..strokeWidth = max(0.7, view.px(t * 0.125))
-          ..strokeCap = StrokeCap.butt,
-      );
-    }
-
-    // 5. Cut a hard seam at every collinear panel boundary. Joint collars
-    // already break up corners and Ts; this pass makes long runs read as
-    // separate wall panels instead of one continuous fill.
-    final seamCut = Paint()
-      ..color = const Color(0xFF03050A)
-      ..strokeWidth = max(2.0, view.px(0.045))
-      ..strokeCap = StrokeCap.butt;
-    String worldKey(Offset p) =>
-        '${(p.dx * 1000).round()}:${(p.dy * 1000).round()}';
-    for (final segment in segments) {
-      final rect = view.toScreenRect(segment);
-      final horizontal = segment.width >= segment.height;
-      final worldA = horizontal
-          ? Offset(segment.left, segment.center.dy)
-          : Offset(segment.center.dx, segment.top);
-      final worldB = horizontal
-          ? Offset(segment.right, segment.center.dy)
-          : Offset(segment.center.dx, segment.bottom);
-      for (final entry in [
-        (worldA, rect.left, rect.top, rect.bottom),
-        (worldB, rect.right, rect.top, rect.bottom),
-      ]) {
-        if (jointKeys.contains(worldKey(entry.$1))) continue;
-        if (horizontal) {
-          canvas.drawLine(
-            Offset(entry.$2, entry.$3 - 1),
-            Offset(entry.$2, entry.$4 + 1),
-            seamCut,
-          );
-        } else {
-          canvas.drawLine(
-            Offset(rect.left - 1, entry.$1.dy),
-            Offset(rect.right + 1, entry.$1.dy),
-            seamCut,
-          );
-        }
-      }
-    }
-
-    // 6. Bolt head in the middle of every collar.
-    for (final joint in joints) {
-      final c = view.toScreen(joint);
-      final ring = jointSize * 0.26;
-      canvas.drawCircle(
-        c,
-        ring,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2
-          ..color = accent.withValues(alpha: 0.82),
-      );
-      canvas.drawCircle(
-        c,
-        ring * 0.38,
-        Paint()..color = Colors.white.withValues(alpha: 0.72),
-      );
-      canvas.drawCircle(
-        c,
-        ring * 0.16,
-        Paint()..color = const Color(0xFF050912),
-      );
     }
   }
 }
@@ -727,25 +463,21 @@ class ScenePainter extends CustomPainter {
     final image = renderer.image;
     if (view == null || image == null) return;
 
-    // Parallax keeps the board feeling physical without moving the physics.
-    final parallax = settings.reduceMotion
-        ? Offset.zero
-        : Offset(-tilt.value.dx, -tilt.value.dy) * 7.0;
-
+    // The board is fixed to the screen. It used to shift with tilt as a
+    // parallax flourish, but those few pixels made the maze look like it was
+    // sliding under the marble while steering, so the board now stays put and
+    // only the marble moves.
     canvas.drawRect(
       Offset.zero & size,
       Paint()..color = const Color(0xFF04060D),
     );
 
-    canvas.save();
-    canvas.translate(parallax.dx, parallax.dy);
     canvas.drawImageRect(
       image,
       Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
       Offset.zero & size,
       Paint()..filterQuality = FilterQuality.medium,
     );
-    canvas.restore();
 
     _paintConveyors(canvas, view);
     _paintMagnets(canvas, view);
@@ -1621,6 +1353,28 @@ class ScenePainter extends CustomPainter {
     final r = view.px(_marbleWorldRadius);
     final tiltValue = tilt.value;
 
+    // Keep the aura and contact shadow inside the corridor. The marble's body
+    // matches its physics radius exactly, but the glow is wider, so without
+    // this clip the halo paints over the wall and the ball looks like it is
+    // sinking into it. Only walls near the marble are cut out, so this stays
+    // cheap even on the largest boards.
+    final reach = _marbleWorldRadius * 2.4;
+    final ballBox = Rect.fromCircle(center: sim.ball, radius: reach);
+    final nearby = <Rect>[];
+    for (final box in sim.wallBoxes) {
+      if (box.overlaps(ballBox)) nearby.add(view.toScreenRect(box));
+    }
+    canvas.save();
+    if (nearby.isNotEmpty) {
+      final clip = Path()
+        ..fillType = PathFillType.evenOdd
+        ..addOval(Rect.fromCircle(center: c, radius: view.px(reach)));
+      for (final box in nearby) {
+        clip.addRect(box);
+      }
+      canvas.clipPath(clip, doAntiAlias: true);
+    }
+
     // Contact shadow reacts to tilt.
     canvas.drawOval(
       Rect.fromCenter(
@@ -1712,6 +1466,8 @@ class ScenePainter extends CustomPainter {
         ..strokeWidth = 1.2
         ..color = Colors.white.withValues(alpha: 0.7),
     );
+
+    canvas.restore();
   }
 
   void _paintRollTexture(Canvas canvas, Offset c, double r) {

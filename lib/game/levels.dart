@@ -150,14 +150,14 @@ class LevelCatalog {
 
     // Bigger boards are the point now: early levels stay readable, late
     // chapters grow into genuinely large labyrinths with long routes.
-    const baseCols = [5, 6, 7, 8, 9, 10, 11, 12];
-    const growth = [2, 2, 3, 3, 4, 4, 5, 6];
+    const baseCols = [5, 7, 8, 10, 12, 13, 15, 16];
+    const growth = [2, 3, 4, 4, 5, 6, 6, 8];
 
     for (var c = 0; c < chapterCount; c++) {
       for (var i = 0; i < levelsPerChapter; i++) {
         final t = i / (levelsPerChapter - 1);
-        final cols = (baseCols[c] + (t * growth[c]).round()).clamp(5, 20);
-        final rows = (cols + (c >= 4 ? 2 : 0) + (i.isEven ? 0 : 1)).clamp(5, 22);
+        final cols = (baseCols[c] + (t * growth[c]).round()).clamp(5, 24);
+        final rows = (cols + (c >= 4 ? 2 : 0) + (i.isEven ? 0 : 1)).clamp(5, 27);
 
         // Teaching cadence: introduce a mechanic, repeat it, then layer the
         // next one on top. Late chapters combine the whole vocabulary.
@@ -169,10 +169,10 @@ class LevelCatalog {
           _ => 5 + i ~/ 4,
         };
         final holes = switch (c) {
-          0 => 1 + i ~/ 3,
-          1 => 2 + i ~/ 3,
-          2 => 3 + i ~/ 4,
-          _ => 4 + i ~/ 4,
+          0 => 2 + i ~/ 3,
+          1 => 3 + i ~/ 3,
+          2 => 4 + i ~/ 4,
+          _ => 5 + i ~/ 4,
         };
         // Surface-speed zones are out: they made the marble feel vague without
         // adding a clear decision. The catalog now uses visible forces (belts,
@@ -180,27 +180,27 @@ class LevelCatalog {
         final ice = 0;
         final tar = 0;
         final gates = switch (c) {
-          3 => 1 + i ~/ 3,
-          4 => 1 + i ~/ 5,
-          6 => 1 + i ~/ 5,
-          7 => 1 + i ~/ 5,
+          3 => 2 + i ~/ 3,
+          4 => 2 + i ~/ 5,
+          6 => 2 + i ~/ 5,
+          7 => 2 + i ~/ 5,
           _ => 0,
         };
         final portals = c == 4 ? (i >= 6 ? 2 : 1) : (c == 7 ? 1 : 0);
         final flow = c == 5 ? 1 + i ~/ 3 : (c == 7 ? 1 : 0);
         final breakables = c == 6 ? 1 + i ~/ 3 : (c == 7 ? 1 : 0);
         final bumpers = c == 2
-            ? 1 + i ~/ 5
+            ? 2 + i ~/ 5
             : (c == 5
-                ? 1 + i ~/ 4
-                : (c == 6 ? 1 + i ~/ 6 : (c == 7 ? 2 : 0)));
+                ? 2 + i ~/ 4
+                : (c == 6 ? 2 + i ~/ 6 : (c == 7 ? 3 : 0)));
         final conveyors = c == 2
-            ? 1 + i ~/ 5
+            ? 2 + i ~/ 5
             : (c == 5
-                ? 1 + i ~/ 4
-                : (c == 6 ? 1 + i ~/ 5 : (c == 7 ? 1 + i ~/ 4 : 0)));
-        final sliders = c == 6 ? 1 + i ~/ 4 : (c == 7 ? 2 : 0);
-        final magnets = c == 7 ? 1 + i ~/ 4 : 0;
+                ? 2 + i ~/ 4
+                : (c == 6 ? 2 + i ~/ 5 : (c == 7 ? 2 + i ~/ 4 : 0)));
+        final sliders = c == 6 ? 2 + i ~/ 4 : (c == 7 ? 3 : 0);
+        final magnets = c == 7 ? 2 + i ~/ 4 : 0;
         final blackout = c == 7 && i >= 2;
         final braid = switch (c) {
           0 => i < 3 ? 0 : 1,
@@ -396,7 +396,7 @@ class Slider {
     required this.amplitude,
     required this.speed,
     required this.phase,
-    this.halfLong = 0.18,
+    this.halfLong = 0.22,
     this.halfThin = 0.095,
   });
 
@@ -666,7 +666,9 @@ class LevelRuntime {
         base: cell.center,
         spansVertically: horizontal,
         amplitude: 0.10,
-        speed: 1.35 + rnd.nextDouble() * 0.35,
+        // Faster sweep: the powered-down window is shorter, so the player has
+        // to read the cycle instead of strolling through.
+        speed: 1.95 + rnd.nextDouble() * 0.50,
         phase: rnd.nextDouble() * pi * 2,
       ));
     }
@@ -732,7 +734,7 @@ class LevelRuntime {
       conveyors.add(Conveyor(
         rect: Rect.fromCenter(center: cell.center, width: 0.98, height: 0.98),
         direction: direction,
-        strength: 6.5 + rnd.nextDouble() * 1.5,
+        strength: 9.0 + rnd.nextDouble() * 2.0,
       ));
     }
 
@@ -761,8 +763,9 @@ class LevelRuntime {
         base: cell.center,
         // Horizontal corridor -> vertical bar that slides up/down.
         slidesVertically: horizontal,
-        amplitude: 0.24,
-        speed: 1.15 + rnd.nextDouble() * 0.35,
+        // A longer sweep and a faster bar leave a smaller gap to time.
+        amplitude: 0.30,
+        speed: 1.65 + rnd.nextDouble() * 0.50,
         phase: rnd.nextDouble() * pi * 2,
       ));
     }
@@ -868,7 +871,9 @@ class LevelRuntime {
         .toList()
       ..shuffle(rnd);
     for (final cell in bumperCandidates.take(spec.bumpers)) {
-      bumpers.add(Bumper(cell.center, 0.24));
+      // A small post the marble can actually get past: a post wider than the
+      // corridor is a wall, not a bumper.
+      bumpers.add(Bumper(cell.center, 0.13));
     }
 
     // Magnets sit on the route so their pull or push changes the line through
@@ -890,8 +895,8 @@ class LevelRuntime {
       magnetCells.add(cell);
       magnets.add(Magnet(
         center: cell.center,
-        radius: 1.05,
-        strength: 4.2 + rnd.nextDouble() * 1.4,
+        radius: 1.15,
+        strength: 6.2 + rnd.nextDouble() * 1.8,
         attract: rnd.nextBool(),
       ));
     }
