@@ -26,9 +26,9 @@ class LevelRecord {
 }
 
 enum SensitivityPreset {
-  easy('Easy', 0.78, 1.00),
-  medium('Medium', 1.00, 1.15),
-  hard('Hard', 1.22, 1.35),
+  easy('Easy', 0.82, 1.00),
+  medium('Medium', 1.05, 1.15),
+  hard('Hard', 1.25, 1.35),
   expert('Expert', 1.48, 1.60);
 
   const SensitivityPreset(this.label, this.gain, this.scoreMultiplier);
@@ -45,7 +45,7 @@ class GameSettings {
   const GameSettings({
     this.preset = SensitivityPreset.medium,
     this.gainAdjust = 0.0,
-    this.deadzone = 0.045,
+    this.deadzone = 0.025,
     this.invertX = false,
     this.invertY = false,
     this.haptics = true,
@@ -131,7 +131,7 @@ class GameSettings {
   static GameSettings fromJson(Map<String, dynamic> j) => GameSettings(
         preset: SensitivityPreset.fromIndex((j['preset'] as num?)?.toInt() ?? 1),
         gainAdjust: (j['gain'] as num?)?.toDouble() ?? 0,
-        deadzone: (j['dz'] as num?)?.toDouble() ?? 0.045,
+        deadzone: (j['dz'] as num?)?.toDouble() ?? 0.025,
         invertX: j['ix'] as bool? ?? false,
         invertY: j['iy'] as bool? ?? false,
         haptics: j['hap'] as bool? ?? true,

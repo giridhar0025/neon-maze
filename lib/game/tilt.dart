@@ -107,7 +107,7 @@ class TiltController extends ChangeNotifier {
       _filtered = clamped;
       _calibrated = true;
     } else {
-      _filtered = Offset.lerp(_filtered, clamped, 0.42)!;
+      _filtered = Offset.lerp(_filtered, clamped, 0.50)!;
     }
     notifyListeners();
   }
@@ -115,6 +115,7 @@ class TiltController extends ChangeNotifier {
   /// Captures the current reading as "level". Hold the phone flat and tap.
   /// Returns the captured offset so callers can persist it.
   Offset calibrate() {
+    if (!_sensorSeen) return _zero;
     _zero = _filtered;
     _hasStoredZero = true;
     _calibrated = true;

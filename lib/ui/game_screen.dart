@@ -294,6 +294,27 @@ class _GameScreenState extends State<GameScreen>
     setState(() => _phase = GamePhase.countdown);
   }
 
+  void _startWithDrag() {
+    _tilt.setTouchMode(true);
+    _tilt.feedFallback(Offset.zero);
+    unawaited(widget.store.markTutorialSeen());
+    _countdownLeft = 3.2;
+    _countdown.value = 3;
+    setState(() => _phase = GamePhase.countdown);
+  }
+
+  void _recalibrate() {
+    if (!_tilt.sensorAvailable) {
+      _snack('Motion sensor not ready yet.');
+      return;
+    }
+    final zero = _tilt.calibrate();
+    unawaited(widget.store.updateSettings(
+      widget.store.settings.copyWith(calX: zero.dx, calY: zero.dy),
+    ));
+    _snack('Recalibrated. Hold the phone this way while you play.');
+  }
+
   void _togglePause() {
     if (_phase == GamePhase.playing) {
       setState(() => _phase = GamePhase.paused);
@@ -573,10 +594,7 @@ class _GameScreenState extends State<GameScreen>
             tilt: _tilt,
             settings: settings,
             onStart: _startFromOnboarding,
-            onSkip: () {
-              unawaited(widget.store.markTutorialSeen());
-              setState(() => _phase = GamePhase.countdown);
-            },
+            onUseDrag: _startWithDrag,
           ),
         if (_phase == GamePhase.countdown)
           _CountdownOverlay(countdown: _countdown, accent: _theme.a, level: _spec),
@@ -588,6 +606,7 @@ class _GameScreenState extends State<GameScreen>
             onResume: _togglePause,
             onRestart: _restart,
             onSettings: _openSettings,
+            onRecalibrate: _recalibrate,
             onQuit: _goToChapters,
           ),
         if (_phase == GamePhase.fallen)
@@ -854,13 +873,13 @@ class _OnboardingOverlay extends StatelessWidget {
     required this.tilt,
     required this.settings,
     required this.onStart,
-    required this.onSkip,
+    required this.onUseDrag,
   });
 
   final TiltController tilt;
   final GameSettings settings;
   final VoidCallback onStart;
-  final VoidCallback onSkip;
+  final VoidCallback onUseDrag;
 
   @override
   Widget build(BuildContext context) {
@@ -893,29 +912,61 @@ class _OnboardingOverlay extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 18),
-                if (!tilt.sensorAvailable)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: Text(
-                      tilt.sensorFailed
-                          ? 'Motion sensor unavailable. Use drag steering on this device.'
-                          : 'Move the phone gently — waiting for motion data. You can start with drag steering.',
-                      textAlign: TextAlign.center,
-                      style: AppText.body(11.5, color: AppColors.gold),
-                    ),
-                  ),
-                NeonButton(
-                  label: 'CALIBRATE & START',
-                  icon: Icons.gps_fixed_rounded,
-                  onTap: onStart,
-                ),
-                const SizedBox(height: 10),
-                TextButton(
-                  onPressed: onSkip,
-                  child: Text(
-                    'Skip calibration',
-                    style: AppText.body(12, color: AppColors.inkFaint),
-                  ),
+                AnimatedBuilder(
+                  animation: tilt,
+                  builder: (context, _) {
+                    final ready = tilt.sensorAvailable;
+                    final failed = tilt.sensorFailed;
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!ready)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Text(
+                              failed
+                                  ? 'Motion sensor unavailable. Use drag steering on this device.'
+                                  : 'Move the phone gently — waiting for motion data.',
+                              textAlign: TextAlign.center,
+                              style: AppText.body(11.5, color: AppColors.gold),
+                            ),
+                          ),
+                        if (!ready && !failed)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 12),
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.inkFaint,
+                              ),
+                            ),
+                          ),
+                        NeonButton(
+                          label: ready
+                              ? 'CALIBRATE & START'
+                              : failed
+                                  ? 'START WITH DRAG'
+                                  : 'WAITING FOR SENSOR',
+                          icon: ready
+                              ? Icons.gps_fixed_rounded
+                              : Icons.pan_tool_alt_rounded,
+                          onTap: ready ? onStart : (failed ? onUseDrag : null),
+                        ),
+                        if (!failed) ...[
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: onUseDrag,
+                            child: Text(
+                              'Start with drag instead',
+                              style: AppText.body(12, color: AppColors.inkFaint),
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -934,6 +985,7 @@ class _PauseOverlay extends StatelessWidget {
     required this.onResume,
     required this.onRestart,
     required this.onSettings,
+    required this.onRecalibrate,
     required this.onQuit,
   });
 
@@ -943,6 +995,7 @@ class _PauseOverlay extends StatelessWidget {
   final VoidCallback onResume;
   final VoidCallback onRestart;
   final VoidCallback onSettings;
+  final VoidCallback onRecalibrate;
   final VoidCallback onQuit;
 
   @override
@@ -1014,7 +1067,15 @@ class _PauseOverlay extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 4),
+                    TextButton.icon(
+                      onPressed: onRecalibrate,
+                      icon: const Icon(Icons.gps_fixed_rounded, size: 16, color: AppColors.cyan),
+                      label: Text(
+                        'Recalibrate tilt now',
+                        style: AppText.body(12.5, color: AppColors.cyan),
+                      ),
+                    ),
                     TextButton(
                       onPressed: onQuit,
                       child: Text(

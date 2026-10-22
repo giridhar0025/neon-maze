@@ -10,10 +10,11 @@ void main() {
     sim.ball = level.start;
     sim.velocity = Offset.zero;
 
-    for (var i = 0; i < 12; i++) {
+    // Short burst: enough to accelerate, short enough not to reach the wall.
+    for (var i = 0; i < 6; i++) {
       sim.step(1 / 60, const Offset(1, 0));
     }
-    expect(sim.velocity.dx, greaterThan(0.05));
+    expect(sim.velocity.dx, greaterThan(0.2));
     expect(sim.ball.dx, greaterThan(level.start.dx));
   });
 
@@ -100,7 +101,7 @@ void main() {
     sim.ball = level.start;
     sim.velocity = Offset.zero;
 
-    for (var i = 0; i < 12; i++) {
+    for (var i = 0; i < 6; i++) {
       sim.step(1 / 60, const Offset(1, 0));
     }
 

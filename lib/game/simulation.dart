@@ -31,8 +31,8 @@ class Simulation {
   }
 
   static const double wallThickness = 0.14;
-  static const double gravity = 9.81;
-  static const double maxSpeed = 6.8;
+  static const double gravity = 16.0;
+  static const double maxSpeed = 9.0;
   static const double fixedStep = 1 / 240;
   static const double exitRadius = 0.30;
   static const double portalRadius = 0.26;
@@ -147,14 +147,16 @@ class Simulation {
     velocity += tilt * gravity * h;
 
     // Rolling resistance (linear) plus a little aerodynamic drag (quadratic).
-    final drag = inTar ? 3.4 : (inIce ? 0.07 : 0.75);
-    final quadratic = inTar ? 0.35 : (inIce ? 0.012 : 0.06);
+    // A marble on a smooth board keeps its momentum: very little rolling
+    // resistance, a touch of quadratic drag. Tar is the exception.
+    final drag = inTar ? 3.0 : (inIce ? 0.03 : 0.18);
+    final quadratic = inTar ? 0.40 : (inIce ? 0.006 : 0.02);
     velocity *= exp(-(drag + speed * quadratic) * h);
     if (inTar) velocity *= exp(-0.5 * h);
 
     final sp = speed;
     if (sp > maxSpeed) velocity = velocity * (maxSpeed / sp);
-    if (sp < 0.008 && tilt.distance < 0.015) velocity = Offset.zero;
+    if (sp < 0.006 && tilt.distance < 0.01) velocity = Offset.zero;
 
     _integrate(h);
     _resolveWalls();
@@ -179,7 +181,7 @@ class Simulation {
     // Two passes settle corner contacts (two walls meeting at a corner).
     for (var pass = 0; pass < 2; pass++) {
       for (final rect in wallBoxes) {
-        _resolveBox(rect, restitution: 0.42, tangentialLoss: 0.045);
+        _resolveBox(rect, restitution: 0.58, tangentialLoss: 0.02);
       }
     }
   }
@@ -188,7 +190,7 @@ class Simulation {
     for (final gate in level.gates) {
       if (!gate.isActive(time)) continue;
       final rect = gate.rectAt(time);
-      _resolveBox(rect, restitution: 0.38, tangentialLoss: 0.08);
+      _resolveBox(rect, restitution: 0.50, tangentialLoss: 0.04);
       if (!rect.inflate(ballRadius).contains(ball)) continue;
       // A moving gate carries the marble a little.
       final c0 = gate.rectAt(time - h).center;
@@ -245,12 +247,12 @@ class Simulation {
 
     final impact = -vn;
     // Low-speed contacts settle instead of micro-bouncing forever.
-    final effectiveRestitution = impact > 0.45 ? restitution : 0.0;
+    final effectiveRestitution = impact > 0.35 ? restitution : 0.0;
     velocity -= normal * (vn * (1 + effectiveRestitution));
 
     // Friction only on a real impact. Applying it every fixed step while the
     // marble rests against a wall is what makes wall-slides feel sticky.
-    if (impact > 0.12) {
+    if (impact > 0.08) {
       final tangent = Offset(-normal.dy, normal.dx);
       final vt = velocity.dx * tangent.dx + velocity.dy * tangent.dy;
       velocity -= tangent * (vt * tangentialLoss);
