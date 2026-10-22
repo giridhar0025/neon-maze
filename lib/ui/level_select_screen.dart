@@ -156,7 +156,7 @@ class _LevelSelectScreenState extends State<LevelSelectScreen> {
                                   record: widget.store.recordFor(level.id),
                                   unlocked: widget.store.isUnlocked(level.id),
                                   onTap: widget.store.isUnlocked(level.id)
-                                      ? () => _open(level.id)
+                                      ? () => _showLevelDetail(level)
                                       : null,
                                 );
                               },
@@ -177,6 +177,21 @@ class _LevelSelectScreenState extends State<LevelSelectScreen> {
         );
       },
     );
+  }
+
+  Future<void> _showLevelDetail(LevelSpec level) async {
+    final theme = ChapterTheme.of(level.chapter);
+    final play = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _LevelSheet(
+        level: level,
+        theme: theme,
+        record: widget.store.recordFor(level.id),
+      ),
+    );
+    if (play == true && mounted) await _open(level.id);
   }
 
   Future<void> _open(int id) async {
@@ -377,6 +392,221 @@ class _LevelTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _LevelSheet extends StatelessWidget {
+  const _LevelSheet({
+    required this.level,
+    required this.theme,
+    required this.record,
+  });
+
+  final LevelSpec level;
+  final ChapterTheme theme;
+  final LevelRecord? record;
+
+  @override
+  Widget build(BuildContext context) {
+    final stars = record?.stars ?? 0;
+    final par = formatDuration(level.parMs);
+    final twoStar = formatDuration((level.parMs * 1.55).round());
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(top: BorderSide(color: theme.a.withValues(alpha: 0.38))),
+        boxShadow: [
+          BoxShadow(
+            color: theme.a.withValues(alpha: 0.10),
+            blurRadius: 36,
+            spreadRadius: -10,
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(99),
+                    color: Colors.white.withValues(alpha: 0.16),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('LEVEL ${level.number}',
+                            style: AppText.display(32, letterSpacing: 0.5)),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${theme.name}  ·  ${theme.subtitle}',
+                          style: AppText.body(12, color: theme.a, weight: 600, letterSpacing: 0.8),
+                        ),
+                      ],
+                    ),
+                  ),
+                  StarRow(stars: stars, size: 22, gap: 4),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final mechanic in level.mechanics)
+                    Pill(label: mechanic, color: theme.a),
+                  Pill(
+                    label: '${level.cols}×${level.rows}',
+                    color: AppColors.inkFaint,
+                    icon: Icons.grid_4x4_rounded,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _SheetStat(
+                      label: 'BEST',
+                      value: record != null && record!.bestMs > 0
+                          ? formatBest(record!.bestMs)
+                          : '—',
+                    ),
+                  ),
+                  Expanded(
+                    child: _SheetStat(label: 'PAR', value: '${par}s'),
+                  ),
+                  Expanded(
+                    child: _SheetStat(label: 'DIFFICULTY', value: '${level.difficulty}/10'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _DifficultyMeter(value: level.difficulty, color: theme.a),
+              const SizedBox(height: 18),
+              GlassCard(
+                accent: theme.a,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Column(
+                  children: [
+                    _StarRule(
+                      stars: 3,
+                      label: 'Beat par  ·  $par s',
+                      color: theme.a,
+                    ),
+                    const SizedBox(height: 8),
+                    _StarRule(
+                      stars: 2,
+                      label: 'Finish under  ·  $twoStar s',
+                      color: theme.a,
+                    ),
+                    const SizedBox(height: 8),
+                    _StarRule(
+                      stars: 1,
+                      label: 'Escape with any time',
+                      color: theme.a,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              NeonButton(
+                label: 'PLAY LEVEL',
+                icon: Icons.play_arrow_rounded,
+                accent: theme.a,
+                onTap: () => Navigator.of(context).pop(true),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetStat extends StatelessWidget {
+  const _SheetStat({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: AppText.body(9, weight: 700, color: AppColors.inkFaint, letterSpacing: 1.3)),
+        const SizedBox(height: 4),
+        Text(value, style: AppText.display(17, weight: 600)),
+      ],
+    );
+  }
+}
+
+class _DifficultyMeter extends StatelessWidget {
+  const _DifficultyMeter({required this.value, required this.color});
+
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        for (var i = 0; i < 10; i++) ...[
+          if (i > 0) const SizedBox(width: 4),
+          Expanded(
+            child: Container(
+              height: 4,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(99),
+                color: i < value
+                    ? color.withValues(alpha: 0.85)
+                    : Colors.white.withValues(alpha: 0.07),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _StarRule extends StatelessWidget {
+  const _StarRule({required this.stars, required this.label, required this.color});
+
+  final int stars;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        StarRow(stars: stars, size: 14, gap: 1),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(label, style: AppText.body(11.5, color: AppColors.inkDim)),
+        ),
+      ],
     );
   }
 }

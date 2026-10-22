@@ -16,11 +16,17 @@ but with an original identity, levels, mechanics, art and audio. No ads, no IAP,
   presets, fine trim, axis inversion and slow posture adaptation.
 - **Touch and keyboard fallback** — drag anywhere or use WASD/arrows on desktop, so the
   game is playable in a browser, on a tablet without a gyro, or in an emulator.
-- **60 hand-tuned generated levels** across six chapters, each introducing a mechanic:
-  holes, energy orbs, ice/tar, pulse gates, portals, bumpers and blackout.
+- **80 generated levels** across eight chapters, each introducing a mechanic:
+  holes, energy orbs, pulse gates, portals, one-way flow panels, conveyor
+  belts, breakable walls, sliding walls, magnets, bumpers and blackout.
+- **Longer routes by construction** — the generator searches seeds for a minimum
+  solution length, so a braided late-game maze cannot collapse into a sprint.
+- **Natural-weight marble physics** — moderate gravity, real rolling resistance and a
+  lower speed cap; the marble responds immediately but settles like an object.
 - **Three-star par times**, persistent best times, score multipliers and level unlocking.
-- **Neon-glass renderer**: cached board art, emissive walls, a glass marble with tilt-driven
-  specular light, motion trail, impact sparks, orb bursts and a blackout light mask.
+- **Neon-glass renderer**: cached board art, joined neon wall networks with corner
+  collars and bolts, a speed-reactive glass marble, tapered trail, layered drop holes,
+  orb bursts and a blackout light mask.
 - **Physical feedback**: synthesized SFX (generated locally, no samples) and throttled haptics.
 - **Accessibility**: reduce-motion mode, colourblind accents, left-handed HUD, adjustable
   dead zone, and no colour-only state (locked exits show a crossbar, open exits show chevrons).
@@ -66,7 +72,7 @@ flutter test
 Coverage is focused on the parts that are easy to break silently:
 
 - maze connectivity, wall symmetry, solution validity, farthest-cell goal;
-- every one of the 60 levels builds, orbs/holes stay off/on the path, mechanics appear;
+- every one of the 80 levels builds, orbs/holes stay reachable, mechanics appear;
 - marble physics: acceleration, no wall tunnelling, orb/exit rules, fall events, reset,
   score ordering, and 20 seconds of randomised input without NaN or escape;
 - unlock/progression/persistence and star/best-time rules;
@@ -80,7 +86,7 @@ lib/
   data/store.dart            settings + per-level records, SharedPreferences
   game/
     maze.dart                seeded DFS maze, braiding, BFS distances, wall boxes
-    levels.dart              60-level catalog, hazard placement, par times
+    levels.dart              80-level catalog, hazard placement, par times
     simulation.dart          engine-free circle/AABB physics with sub-stepping
     tilt.dart                accelerometer -> calibrated, filtered, scaled tilt
     particles.dart           pooled sparks/bursts
@@ -97,14 +103,17 @@ control over feel.
 The simulation runs at a **fixed 240 Hz** with an accumulator, so 60/90/120 Hz displays
 produce the same trajectory and a dropped frame cannot tunnel through a wall. Gravity is
 projected from the tilt vector; rolling resistance is linear plus a small quadratic drag.
-Wall contact applies restitution and tangential friction **only on a real impact**, so
-grazing a wall slides instead of sticking. `rollAngle`/`rollDirection` drive visible
-surface flecks on the marble, which is what makes it read as a rolling ball rather than
-a sliding dot.
+Wall contact keeps a light bounce, applies tangential friction **only on a real impact**,
+and fires **no** sparks, haptics or SFX — grazing a wall is silent and the marble slides
+instead of sticking. `rollAngle`/`rollDirection` drive visible surface flecks on the
+marble, which is what makes it read as a rolling ball rather than a sliding dot.
+Conveyors add a directional force, magnets add a radial force with falloff, and sliding
+walls are resolved as moving AABBs.
 
-**Rendering cost.** The board (background, walls, holes, ice, tar, exit base) is rendered
+**Rendering cost.** The board (background, walls, holes, exit base) is rendered
 once per level/size into a `ui.Image` via `Picture.toImageSync`, then blitted each frame.
-Only gates, orbs, portals, trail, marble, particles and the blackout mask are live.
+Only gates, belts, sliders, magnets, orbs, portals, flow panels, breakables, live hole
+rims, trail, marble, particles and the blackout mask are live.
 
 ## REA analysis
 
@@ -119,7 +128,7 @@ No strings, assets, audio, level seeds or code from the original are reused.
 
 - Play Games Services leaderboards/achievements (the reference app used them; this build
   deliberately stays offline until privacy copy exists).
-- Chapter 7–8 mechanics: one-way flow, magnets, breakable walls.
+- Chapter 9–10 mechanics: rotating bars, patrol hazards and breakable floors.
 - Daily seeded challenge with shareable result card.
 - Ambient generative music to match the synthesized SFX.
 - Localisation pass (the genre audience is global; strings are currently English).

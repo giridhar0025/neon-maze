@@ -75,15 +75,16 @@ Outputs: `build/app/outputs/bundle/release/app-release.aab` and
 
 **Short description (80 chars)**
 
-> Tilt to roll a glass marble through 60 neon mazes. Offline. No ads.
+> Tilt to roll a glass marble through 80 neon mazes. Offline. No ads.
 
 **Full description**
 
 > Neon Maze turns your phone into a hand-held labyrinth. Tilt to roll a glass marble
 > through glowing corridors, collect every energy orb and reach the exit before par time.
 >
-> SIX CHAPTERS, SEVEN MECHANICS
-> Holes, energy orbs, ice and tar, pulse gates, portals, bumpers and total blackout.
+> EIGHT CHAPTERS, ELEVEN MECHANICS
+> Holes, energy orbs, pulse gates, portals, one-way flow panels,
+> conveyor belts, breakable walls, sliding walls, magnets, bumpers and blackout.
 > Each chapter adds one idea, so the difficulty curve teaches you as it grows.
 >
 > BUILT FOR YOUR HANDS
@@ -91,7 +92,7 @@ Outputs: `build/app/outputs/bundle/release/app-release.aab` and
 > Drag anywhere to steer. Every setting is saved on device.
 >
 > CHASE THREE STARS
-> Each of the 60 levels has a par time. Beat it for three stars, then push your personal
+> Each of the 80 levels has a par time. Beat it for three stars, then push your personal
 > best. Progress and best times work fully offline.
 >
 > RESPECTS YOUR TIME
@@ -132,8 +133,8 @@ Tilt cannot be validated in a browser or emulator.
 - [x] Accelerometer streams at 50 Hz and the marble follows the tilt direction.
 - [ ] Pause/background/resume cycle on device.
 - [ ] Haptics and SFX on device.
-- [ ] Pulse gate and portal levels on device.
-- [ ] 60 fps on a mid-range device; no audio stutter on repeated wall hits.
+- [ ] Pulse gate, portal, flow-panel, conveyor, slider, magnet and breakable-wall levels on device.
+- [ ] 60 fps on a mid-range device; no audio stutter on repeated bumper hits.
 
 ## 6. Known gaps before a 1.1
 

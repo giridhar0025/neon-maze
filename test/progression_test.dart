@@ -11,17 +11,17 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('progress unlocks one level at a time', () async {
+  test('progress records wins and testing mode opens the catalog', () async {
     final store = await AppStore.load();
 
     expect(store.continueLevelId, 0);
     expect(store.isUnlocked(0), isTrue);
-    expect(store.isUnlocked(1), isFalse);
-    expect(store.isUnlocked(2), isFalse);
+    expect(store.isUnlocked(1), AppStore.unlockAllLevels);
+    expect(store.isUnlocked(2), AppStore.unlockAllLevels);
 
     await store.recordWin(0, 2, 14000);
     expect(store.isUnlocked(1), isTrue);
-    expect(store.isUnlocked(2), isFalse);
+    expect(store.isUnlocked(2), AppStore.unlockAllLevels);
     expect(store.starsFor(0), 2);
     expect(store.bestMsFor(0), 14000);
 
@@ -107,7 +107,7 @@ void main() {
     expect(store.totalStars, 0);
     expect(store.clearedCount, 0);
     expect(store.tutorialSeen, isFalse);
-    expect(store.isUnlocked(1), isFalse);
+    expect(store.isUnlocked(1), AppStore.unlockAllLevels);
   });
 
   test('sensitivity presets scale score and gain', () {

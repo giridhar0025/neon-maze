@@ -3,13 +3,14 @@ import 'package:neon_maze/game/levels.dart';
 import 'package:neon_maze/game/maze.dart';
 
 void main() {
-  test('catalog has six chapters of ten levels with rising grid sizes', () {
-    expect(LevelCatalog.all.length, 60);
+  test('catalog has eight chapters of ten levels with rising grid sizes', () {
+    expect(LevelCatalog.all.length, 80);
     expect(LevelCatalog.byId(0).cols, 5);
-    expect(LevelCatalog.byId(59).cols, greaterThanOrEqualTo(12));
+    expect(LevelCatalog.byId(79).cols, greaterThanOrEqualTo(16));
     expect(LevelCatalog.byId(9).chapter, 0);
     expect(LevelCatalog.byId(10).chapter, 1);
     expect(LevelCatalog.byId(59).chapter, 5);
+    expect(LevelCatalog.byId(79).chapter, 7);
   });
 
   test('every level builds and is solvable by construction', () {
@@ -26,7 +27,7 @@ void main() {
         for (final c in maze.solution) maze.indexOf(c.x, c.y),
       };
 
-      // Holes never sit on the solution, so the exit remains reachable.
+      // Holes never sit on the solution, so the main route stays open.
       for (final hole in level.holes) {
         final idx = maze.indexOf(hole.center.dx.floor(), hole.center.dy.floor());
         expect(solutionCells.contains(idx), isFalse,
@@ -35,11 +36,18 @@ void main() {
         expect(hole.center.dy, inInclusiveRange(0, spec.rows.toDouble()));
       }
 
-      // Orbs are always reachable: they are placed on solution cells.
+      // Orbs can live in side branches now, but every one must be reachable.
+      final holeCells = {
+        for (final h in level.holes)
+          maze.indexOf(h.center.dx.floor(), h.center.dy.floor()),
+      };
       for (final orb in level.orbs) {
-        final idx = maze.indexOf(orb.center.dx.floor(), orb.center.dy.floor());
-        expect(solutionCells.contains(idx), isTrue,
-            reason: 'level ${spec.id} orb is off the path');
+        final cell = Cell(orb.center.dx.floor(), orb.center.dy.floor());
+        final idx = maze.indexOf(cell.x, cell.y);
+        expect(maze.distanceAt(cell), greaterThanOrEqualTo(0),
+            reason: 'level ${spec.id} orb is unreachable');
+        expect(holeCells.contains(idx), isFalse,
+            reason: 'level ${spec.id} orb sits inside a hole');
         expect(orb.center, isNot(level.start));
         expect(orb.center, isNot(level.exit));
       }
@@ -62,17 +70,32 @@ void main() {
         expect((pair.a - pair.b).distance, greaterThan(1.5));
       }
 
+      for (final panel in level.flowPanels) {
+        expect(panel.direction.distance, closeTo(1.0, 1e-6));
+        expect(panel.rect.width, greaterThan(0));
+        expect(panel.rect.height, greaterThan(0));
+      }
+
+      for (final wall in level.breakables) {
+        expect(wall.rect.width, greaterThan(0));
+        expect(wall.rect.height, greaterThan(0));
+        expect(level.isBreakableBox(wall.rect), isTrue);
+      }
+
       expect(spec.parMs, greaterThan(8000));
     }
   });
 
-  test('chapter one introduces orbs and chapter two introduces ice and tar', () {
+  test('chapters introduce mechanics in a deliberate order', () {
     expect(LevelCatalog.chapter(0).every((l) => l.orbs == 0), isTrue);
     expect(LevelCatalog.chapter(1).every((l) => l.orbs >= 2), isTrue);
-    expect(LevelCatalog.chapter(2).every((l) => l.iceZones > 0 && l.tarZones > 0), isTrue);
+    expect(LevelCatalog.chapter(2).every((l) => l.conveyors > 0 && l.bumpers > 0), isTrue);
+    expect(LevelCatalog.all.every((l) => l.iceZones == 0 && l.tarZones == 0), isTrue);
     expect(LevelCatalog.chapter(3).every((l) => l.gates > 0), isTrue);
     expect(LevelCatalog.chapter(4).every((l) => l.portalPairs > 0), isTrue);
-    expect(LevelCatalog.chapter(5).any((l) => l.blackout), isTrue);
+    expect(LevelCatalog.chapter(5).every((l) => l.flowPanels > 0), isTrue);
+    expect(LevelCatalog.chapter(6).every((l) => l.breakables > 0), isTrue);
+    expect(LevelCatalog.chapter(7).any((l) => l.blackout), isTrue);
   });
 
   test('star thresholds are ordered', () {
@@ -82,12 +105,13 @@ void main() {
     expect(spec.starsFor((spec.parMs * 2).round()), 1);
   });
 
-  test('maze sizes stay inside a mobile-friendly range', () {
+  test('maze sizes stay inside a large-board range', () {
     for (final spec in LevelCatalog.all) {
-      expect(spec.cols, inInclusiveRange(5, 14));
-      expect(spec.rows, inInclusiveRange(5, 14));
-      expect(spec.cols * spec.rows, lessThan(200));
+      expect(spec.cols, inInclusiveRange(5, 20));
+      expect(spec.rows, inInclusiveRange(5, 22));
+      expect(spec.cols * spec.rows, lessThan(500));
       expect(spec.seed, greaterThan(0));
+      expect(spec.difficulty, inInclusiveRange(1, 10));
       expect(Dir.values.length, 4);
     }
   });

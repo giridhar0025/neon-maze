@@ -238,40 +238,96 @@ class BoardRenderer {
     for (final hole in level.holes) {
       final c = view.toScreen(hole.center);
       final r = view.px(hole.radius);
+
+      // Deep shadow and a soft warning glow around the drop.
       canvas.drawCircle(
         c,
-        r * 1.55,
+        r * 1.75,
         Paint()
-          ..color = Colors.black.withValues(alpha: 0.5)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.55),
+          ..color = Colors.black.withValues(alpha: 0.60)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.65),
       );
       canvas.drawCircle(
         c,
-        r,
+        r * 1.30,
         Paint()
           ..shader = RadialGradient(
-            colors: const [Color(0xFF000000), Color(0xFF05060C)],
-            stops: const [0.6, 1.0],
+            colors: [
+              AppColors.danger.withValues(alpha: 0.10),
+              Colors.transparent,
+            ],
+          ).createShader(Rect.fromCircle(center: c, radius: r * 1.3)),
+      );
+
+      // Machined rim band.
+      canvas.drawCircle(
+        c,
+        r * 1.02,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = max(2.0, r * 0.15)
+          ..shader = SweepGradient(
+            colors: [
+              AppColors.danger.withValues(alpha: 0.55),
+              themeA.withValues(alpha: 0.45),
+              AppColors.danger.withValues(alpha: 0.55),
+            ],
           ).createShader(Rect.fromCircle(center: c, radius: r)),
+      );
+
+      // Layered well: pure black at the centre, cold blue-black at the lip.
+      canvas.drawCircle(
+        c,
+        r * 0.94,
+        Paint()
+          ..shader = RadialGradient(
+            colors: const [
+              Color(0xFF000000),
+              Color(0xFF02040A),
+              Color(0xFF0B1220),
+            ],
+            stops: const [0.0, 0.68, 1.0],
+          ).createShader(Rect.fromCircle(center: c, radius: r * 0.94)),
       );
       canvas.drawCircle(
         c,
-        r,
+        r * 0.64,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.4
-          ..color = themeA.withValues(alpha: 0.30),
+          ..strokeWidth = 1
+          ..color = AppColors.danger.withValues(alpha: 0.14),
       );
+      canvas.drawCircle(
+        c,
+        r * 0.38,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = themeA.withValues(alpha: 0.10),
+      );
+
+      // Rim ticks.
+      final tick = Paint()
+        ..color = AppColors.danger.withValues(alpha: 0.34)
+        ..strokeWidth = 1.2
+        ..strokeCap = StrokeCap.round;
+      for (var k = 0; k < 8; k++) {
+        final angle = k * pi / 4;
+        final dir = Offset(cos(angle), sin(angle));
+        canvas.drawLine(c + dir * (r * 1.08), c + dir * (r * 1.28), tick);
+      }
+
+      // Cold glint on the inner wall.
       canvas.drawArc(
-        Rect.fromCircle(center: c, radius: r * 0.72),
-        -pi * 0.15,
-        pi * 0.9,
+        Rect.fromCircle(center: c, radius: r * 0.56),
+        -pi * 0.80,
+        pi * 0.38,
         false,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.2
+          ..strokeWidth = 1.2
           ..strokeCap = StrokeCap.round
-          ..color = AppColors.danger.withValues(alpha: 0.22),
+          ..color = Colors.white.withValues(alpha: 0.10),
       );
     }
 
@@ -321,64 +377,322 @@ class BoardRenderer {
     bool colorblind,
   ) {
     final t = Simulation.wallThickness;
-    final boxes = level.maze.wallBoxes(t);
+    final allSegments = level.maze.wallSegments(t);
+    // Breakable sections are drawn live so they can disappear on impact.
+    final segments = allSegments
+        .where((segment) => !level.isBreakableBox(segment))
+        .toList();
     final accent = theme.a;
 
+    // A wall network is only as good as its joins. Collect every segment
+    // endpoint, then put a mechanical collar on ends, corners, Ts and crosses.
+    final endpoints = <String, List<bool>>{};
+    void addEndpoint(Offset point, bool horizontal) {
+      final key = '${(point.dx * 1000).round()}:${(point.dy * 1000).round()}';
+      endpoints.putIfAbsent(key, () => <bool>[]).add(horizontal);
+    }
+
+    for (final segment in allSegments) {
+      final horizontal = segment.width >= segment.height;
+      final a = horizontal
+          ? Offset(segment.left, segment.center.dy)
+          : Offset(segment.center.dx, segment.top);
+      final b = horizontal
+          ? Offset(segment.right, segment.center.dy)
+          : Offset(segment.center.dx, segment.bottom);
+      addEndpoint(a, horizontal);
+      addEndpoint(b, horizontal);
+    }
+
+    final joints = <Offset>[];
+    final jointKeys = <String>{};
+    for (final entry in endpoints.entries) {
+      final directions = entry.value;
+      final isJoint = directions.length == 1 ||
+          directions.length >= 3 ||
+          (directions.length == 2 && directions[0] != directions[1]);
+      if (!isJoint) continue;
+      jointKeys.add(entry.key);
+      final parts = entry.key.split(':');
+      joints.add(Offset(
+        int.parse(parts[0]) / 1000.0,
+        int.parse(parts[1]) / 1000.0,
+      ));
+    }
+
+    final bloom = Paint()
+      ..color = accent.withValues(alpha: 0.15)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.20));
     final shadow = Paint()
-      ..color = Colors.black.withValues(alpha: 0.55)
+      ..color = Colors.black.withValues(alpha: 0.52)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.12));
-    final sheen = Paint()
-      ..color = Colors.white.withValues(alpha: 0.14)
-      ..strokeWidth = 1;
-    final glow = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = view.px(0.075)
-      ..color = accent.withValues(alpha: 0.34)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.11));
-    final edge = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..color = accent.withValues(alpha: 0.88);
+    final jointSize = view.px(t * 1.9);
 
-    const inset = 0.02;
-    for (final box in boxes) {
-      final rect = view.toScreenRect(box.deflate(0));
-      final radius = Radius.circular(max(2, view.px(t * 0.45)));
-      final rr = RRect.fromRectAndRadius(rect, radius);
-      final inner = RRect.fromRectAndRadius(
-        rect.deflate(view.px(inset)).deflate(0),
-        radius,
+    // 1. Ambient bloom behind the network.
+    for (final segment in segments) {
+      final rect = view.toScreenRect(segment);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          rect.deflate(1),
+          Radius.circular(max(2, view.px(t * 0.4))),
+        ),
+        bloom,
       );
+    }
+
+    // 2. Continuous dark backing rail plus an inset panel for every cell
+    // edge. The seam between panels is what makes a long wall read as built
+    // sections instead of one flat fill.
+    for (final segment in segments) {
+      final rect = view.toScreenRect(segment);
+      final horizontal = segment.width >= segment.height;
+      final radius = Radius.circular(max(1.5, view.px(t * 0.34)));
 
       canvas.drawRRect(
-        rr.shift(Offset(0, view.px(0.05))),
-        shadow,
+        RRect.fromRectAndRadius(rect.inflate(0.8), radius),
+        Paint()..color = const Color(0xFF04070E),
       );
+
+      final seam = max(2.0, view.px(0.045));
+      final panel = horizontal
+          ? Rect.fromLTRB(
+              rect.left + seam,
+              rect.top + 1.0,
+              rect.right - seam,
+              rect.bottom - 1.0,
+            )
+          : Rect.fromLTRB(
+              rect.left + 1.0,
+              rect.top + seam,
+              rect.right - 1.0,
+              rect.bottom - seam,
+            );
+      final rr = RRect.fromRectAndRadius(panel, radius);
+      final inner = Rect.fromLTRB(
+        panel.left + 1.1,
+        panel.top + 1.1,
+        max(panel.left + 2.1, panel.right - 1.1),
+        max(panel.top + 2.1, panel.bottom - 1.1),
+      );
+      final alternate = (segment.center.dx + segment.center.dy).round().isEven;
+      final topTone = alternate
+          ? Color.lerp(const Color(0xFF263C67), accent, 0.10)!
+          : Color.lerp(const Color(0xFF203355), accent, 0.06)!;
+
+      canvas.drawRRect(rr.shift(Offset(0, view.px(0.045))), shadow);
       canvas.drawRRect(
-        inner,
+        rr,
         Paint()
-          ..shader = ui.Gradient.linear(
-            Offset(rect.left, rect.top),
-            Offset(rect.left, rect.bottom),
-            [Color.lerp(const Color(0xFF33477D), accent, 0.10)!, const Color(0xFF0A0F1E)],
-          ),
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [topTone, const Color(0xFF0A1120)],
+          ).createShader(panel),
       );
-      if (rect.width > rect.height) {
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTWH(
-              inner.left + 1,
-              inner.top + 1,
-              inner.width - 2,
-              max(1, inner.height * 0.26),
-            ),
-            Radius.circular(max(1, view.px(t * 0.3))),
-          ),
-          sheen,
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(inner, radius),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.lerp(const Color(0xFF111C34), accent, 0.05)!,
+              const Color(0xFF050912),
+            ],
+          ).createShader(inner),
+      );
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = accent.withValues(alpha: 0.32),
+      );
+
+      // Bright divider ribs at both panel ends.
+      final rib = Paint()
+        ..color = accent.withValues(alpha: 0.55)
+        ..strokeWidth = 1.2
+        ..strokeCap = StrokeCap.round;
+      if (horizontal) {
+        canvas.drawLine(
+          Offset(panel.left + 0.5, panel.top + 1.1),
+          Offset(panel.left + 0.5, panel.bottom - 1.1),
+          rib,
+        );
+        canvas.drawLine(
+          Offset(panel.right - 0.5, panel.top + 1.1),
+          Offset(panel.right - 0.5, panel.bottom - 1.1),
+          rib,
+        );
+      } else {
+        canvas.drawLine(
+          Offset(panel.left + 1.1, panel.top + 0.5),
+          Offset(panel.right - 1.1, panel.top + 0.5),
+          rib,
+        );
+        canvas.drawLine(
+          Offset(panel.left + 1.1, panel.bottom - 0.5),
+          Offset(panel.right - 1.1, panel.bottom - 0.5),
+          rib,
         );
       }
-      canvas.drawRRect(inner, glow);
-      canvas.drawRRect(inner, edge);
+    }
+
+    // 3. Joint collars fill the corners and make the network read as built,
+    // not painted.
+    for (final joint in joints) {
+      final c = view.toScreen(joint);
+      final rect = Rect.fromCenter(center: c, width: jointSize, height: jointSize);
+      final rr = RRect.fromRectAndRadius(
+        rect,
+        Radius.circular(jointSize * 0.24),
+      );
+      canvas.drawRRect(rr.shift(Offset(0, view.px(0.04))), shadow);
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(const Color(0xFF2A416F), accent, 0.14)!,
+              const Color(0xFF080D18),
+            ],
+          ).createShader(rect),
+      );
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.1
+          ..color = accent.withValues(alpha: 0.48),
+      );
+      // Four edge slots make the collar feel like a machined bracket.
+      final slot = Paint()
+        ..color = Colors.black.withValues(alpha: 0.55)
+        ..strokeWidth = 1;
+      canvas.drawLine(
+        Offset(rect.left + jointSize * 0.16, rect.center.dy),
+        Offset(rect.left + jointSize * 0.30, rect.center.dy),
+        slot,
+      );
+      canvas.drawLine(
+        Offset(rect.right - jointSize * 0.30, rect.center.dy),
+        Offset(rect.right - jointSize * 0.16, rect.center.dy),
+        slot,
+      );
+      canvas.drawLine(
+        Offset(rect.center.dx, rect.top + jointSize * 0.16),
+        Offset(rect.center.dx, rect.top + jointSize * 0.30),
+        slot,
+      );
+      canvas.drawLine(
+        Offset(rect.center.dx, rect.bottom - jointSize * 0.30),
+        Offset(rect.center.dx, rect.bottom - jointSize * 0.16),
+        slot,
+      );
+    }
+
+    // 4. Long-axis light tube on each segment.
+    for (final segment in segments) {
+      final rect = view.toScreenRect(segment);
+      final horizontal = segment.width >= segment.height;
+      final seam = max(2.0, view.px(0.045));
+      final coreStart = horizontal
+          ? Offset(rect.left + seam + 1, rect.center.dy)
+          : Offset(rect.center.dx, rect.top + seam + 1);
+      final coreEnd = horizontal
+          ? Offset(rect.right - seam - 1, rect.center.dy)
+          : Offset(rect.center.dx, rect.bottom - seam - 1);
+      canvas.drawLine(
+        coreStart,
+        coreEnd,
+        Paint()
+          ..color = accent.withValues(alpha: 0.28)
+          ..strokeWidth = max(1.0, view.px(t * 1.45))
+          ..strokeCap = StrokeCap.butt
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.10)),
+      );
+      canvas.drawLine(
+        coreStart,
+        coreEnd,
+        Paint()
+          ..color = accent.withValues(alpha: 0.90)
+          ..strokeWidth = max(1.0, view.px(t * 0.42))
+          ..strokeCap = StrokeCap.butt,
+      );
+      canvas.drawLine(
+        coreStart,
+        coreEnd,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.55)
+          ..strokeWidth = max(0.7, view.px(t * 0.125))
+          ..strokeCap = StrokeCap.butt,
+      );
+    }
+
+    // 5. Cut a hard seam at every collinear panel boundary. Joint collars
+    // already break up corners and Ts; this pass makes long runs read as
+    // separate wall panels instead of one continuous fill.
+    final seamCut = Paint()
+      ..color = const Color(0xFF03050A)
+      ..strokeWidth = max(2.0, view.px(0.045))
+      ..strokeCap = StrokeCap.butt;
+    String worldKey(Offset p) =>
+        '${(p.dx * 1000).round()}:${(p.dy * 1000).round()}';
+    for (final segment in segments) {
+      final rect = view.toScreenRect(segment);
+      final horizontal = segment.width >= segment.height;
+      final worldA = horizontal
+          ? Offset(segment.left, segment.center.dy)
+          : Offset(segment.center.dx, segment.top);
+      final worldB = horizontal
+          ? Offset(segment.right, segment.center.dy)
+          : Offset(segment.center.dx, segment.bottom);
+      for (final entry in [
+        (worldA, rect.left, rect.top, rect.bottom),
+        (worldB, rect.right, rect.top, rect.bottom),
+      ]) {
+        if (jointKeys.contains(worldKey(entry.$1))) continue;
+        if (horizontal) {
+          canvas.drawLine(
+            Offset(entry.$2, entry.$3 - 1),
+            Offset(entry.$2, entry.$4 + 1),
+            seamCut,
+          );
+        } else {
+          canvas.drawLine(
+            Offset(rect.left - 1, entry.$1.dy),
+            Offset(rect.right + 1, entry.$1.dy),
+            seamCut,
+          );
+        }
+      }
+    }
+
+    // 6. Bolt head in the middle of every collar.
+    for (final joint in joints) {
+      final c = view.toScreen(joint);
+      final ring = jointSize * 0.26;
+      canvas.drawCircle(
+        c,
+        ring,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..color = accent.withValues(alpha: 0.82),
+      );
+      canvas.drawCircle(
+        c,
+        ring * 0.38,
+        Paint()..color = Colors.white.withValues(alpha: 0.72),
+      );
+      canvas.drawCircle(
+        c,
+        ring * 0.16,
+        Paint()..color = const Color(0xFF050912),
+      );
     }
   }
 }
@@ -433,15 +747,389 @@ class ScenePainter extends CustomPainter {
     );
     canvas.restore();
 
+    _paintConveyors(canvas, view);
+    _paintMagnets(canvas, view);
     _paintPortals(canvas, view);
+    _paintFlowPanels(canvas, view);
+    _paintBumpers(canvas, view);
+    _paintSliders(canvas, view);
+    _paintBreakables(canvas, view);
     _paintOrbs(canvas, view);
     _paintGates(canvas, view);
+    _paintHolesLive(canvas, view);
     _paintExit(canvas, view);
     _paintTrail(canvas, view);
     _paintParticles(canvas, view);
     if (!sim.fell) _paintMarble(canvas, view);
     if (level.spec.blackout) _paintBlackout(canvas, view, size);
     _paintVignette(canvas, size);
+  }
+
+  /// Floor belts. The base is a tinted pad; the chevrons show which way it is
+  /// pushing so the player can decide to ride it or fight it.
+  void _paintConveyors(Canvas canvas, BoardView view) {
+    for (var i = 0; i < level.conveyors.length; i++) {
+      final conveyor = level.conveyors[i];
+      final rect = view.toScreenRect(conveyor.rect);
+      final color = settings.colorblind ? AppColors.blue : theme.b;
+      final pulse = settings.reduceMotion
+          ? 0.5
+          : 0.5 + 0.5 * sin(sim.visualTime * 2.0 + i);
+
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, Radius.circular(view.px(0.16))),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color.withValues(alpha: 0.16 + pulse * 0.05),
+              color.withValues(alpha: 0.04),
+            ],
+          ).createShader(rect),
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, Radius.circular(view.px(0.16))),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = color.withValues(alpha: 0.34),
+      );
+
+      final dir = conveyor.direction;
+      final perp = Offset(-dir.dy, dir.dx);
+      final center = view.toScreen(conveyor.rect.center);
+      final half = view.px(0.40);
+      final phase = settings.reduceMotion ? 0.25 : (sim.visualTime * 1.5) % 1.0;
+      final arrow = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round;
+      for (var k = 0; k < 3; k++) {
+        final along = (-1.0 + (k + phase) * 0.85) * half;
+        final c = center + dir * along;
+        final tip = c + dir * view.px(0.11);
+        final back = c - dir * view.px(0.04);
+        final left = back + perp * view.px(0.085);
+        final right = back - perp * view.px(0.085);
+        arrow.color = color.withValues(alpha: 0.30 + 0.20 * pulse);
+        canvas.drawPath(
+          Path()
+            ..moveTo(left.dx, left.dy)
+            ..lineTo(tip.dx, tip.dy)
+            ..lineTo(right.dx, right.dy),
+          arrow,
+        );
+      }
+      // Side rails make the belt read as a mechanical strip.
+      final rail = Paint()
+        ..color = color.withValues(alpha: 0.14)
+        ..strokeWidth = 1;
+      canvas.drawLine(
+        center + perp * view.px(0.38),
+        center + perp * view.px(0.38) + dir * view.px(0.7),
+        rail,
+      );
+      canvas.drawLine(
+        center - perp * view.px(0.38),
+        center - perp * view.px(0.38) + dir * view.px(0.7),
+        rail,
+      );
+    }
+  }
+
+  /// Attractors pull the marble in, repulsors push it away. The arrows point
+  /// the way the force acts.
+  void _paintMagnets(Canvas canvas, BoardView view) {
+    for (var i = 0; i < level.magnets.length; i++) {
+      final magnet = level.magnets[i];
+      final center = view.toScreen(magnet.center);
+      final radius = view.px(magnet.radius);
+      final color = magnet.attract ? AppColors.blue : AppColors.magenta;
+      final pulse = settings.reduceMotion
+          ? 0.5
+          : 0.5 + 0.5 * sin(sim.visualTime * 2.4 + i * 1.3);
+
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              color.withValues(alpha: 0.05 + pulse * 0.03),
+              Colors.transparent,
+            ],
+          ).createShader(Rect.fromCircle(center: center, radius: radius)),
+      );
+
+      // Three broken rings.
+      final ring = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..strokeCap = StrokeCap.round;
+      for (var k = 0; k < 3; k++) {
+        ring.color = color.withValues(alpha: 0.16 + 0.10 * pulse);
+        final r = radius * (0.38 + k * 0.24);
+        final spin = sim.visualTime * (magnet.attract ? 0.7 : -0.7) + k * 1.4;
+        for (var a = 0; a < 3; a++) {
+          canvas.drawArc(
+            Rect.fromCircle(center: center, radius: r),
+            spin + a * (2 * pi / 3),
+            0.65,
+            false,
+            ring,
+          );
+        }
+      }
+
+      // Radial force ticks.
+      final tick = Paint()
+        ..color = color.withValues(alpha: 0.30 + 0.18 * pulse)
+        ..strokeWidth = 1.4
+        ..strokeCap = StrokeCap.round;
+      for (var k = 0; k < 8; k++) {
+        final angle = k * pi / 4 + sim.visualTime * 0.15;
+        final outer = radius * 0.82;
+        final inner = outer - radius * (magnet.attract ? 0.12 : 0.06);
+        final dir = Offset(cos(angle), sin(angle));
+        final start = center + dir * (magnet.attract ? outer : inner);
+        final end = center + dir * (magnet.attract ? inner : outer);
+        canvas.drawLine(start, end, tick);
+        // Arrow head, pointing in or out.
+        final tip = magnet.attract ? end : start;
+        final back = magnet.attract ? start : end;
+        final side = Offset(-dir.dy, dir.dx) * view.px(0.035);
+        canvas.drawLine(tip, back + side, tick);
+        canvas.drawLine(tip, back - side, tick);
+      }
+
+      // Centre badge with a plus (attract) or minus (repel).
+      canvas.drawCircle(
+        center,
+        radius * 0.16,
+        Paint()..color = color.withValues(alpha: 0.18),
+      );
+      final mark = Paint()
+        ..color = color.withValues(alpha: 0.9)
+        ..strokeWidth = 1.8
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(
+        center - Offset(radius * 0.07, 0),
+        center + Offset(radius * 0.07, 0),
+        mark,
+      );
+      if (magnet.attract) {
+        canvas.drawLine(
+          center - Offset(0, radius * 0.07),
+          center + Offset(0, radius * 0.07),
+          mark,
+        );
+      }
+    }
+  }
+
+  /// Bumpers are physical redirectors, so they get a bright spring ring and a
+  /// pulsing core instead of being an invisible force.
+  void _paintBumpers(Canvas canvas, BoardView view) {
+    for (var i = 0; i < level.bumpers.length; i++) {
+      final bumper = level.bumpers[i];
+      final c = view.toScreen(bumper.center);
+      final r = view.px(bumper.radius);
+      final pulse = settings.reduceMotion
+          ? 0.5
+          : 0.5 + 0.5 * sin(sim.visualTime * 2.8 + i * 1.6);
+      final color = settings.colorblind ? AppColors.amber : theme.b;
+
+      canvas.drawCircle(
+        c,
+        r * 1.25,
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.40)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.35),
+      );
+      canvas.drawCircle(
+        c,
+        r * (1.3 + pulse * 0.12),
+        Paint()
+          ..color = color.withValues(alpha: 0.12 + 0.10 * pulse)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.50),
+      );
+      canvas.drawCircle(
+        c,
+        r,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              color.withValues(alpha: 0.28),
+              const Color(0xFF07101E),
+            ],
+          ).createShader(Rect.fromCircle(center: c, radius: r)),
+      );
+      canvas.drawCircle(
+        c,
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = color.withValues(alpha: 0.82),
+      );
+      canvas.drawCircle(
+        c,
+        r * 0.64,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..color = Colors.white.withValues(alpha: 0.28 + 0.15 * pulse),
+      );
+
+      // Spring spokes.
+      final spoke = Paint()
+        ..color = color.withValues(alpha: 0.55)
+        ..strokeWidth = 1.4
+        ..strokeCap = StrokeCap.round;
+      for (var k = 0; k < 6; k++) {
+        final angle = k * pi / 3 + sim.visualTime * 0.18;
+        final dir = Offset(cos(angle), sin(angle));
+        canvas.drawLine(c + dir * (r * 0.72), c + dir * (r * 0.98), spoke);
+        canvas.drawCircle(c + dir * (r * 1.04), 1.4, spoke);
+      }
+
+      canvas.drawCircle(
+        c,
+        r * 0.24,
+        Paint()..color = color.withValues(alpha: 0.90),
+      );
+      canvas.drawCircle(
+        c,
+        r * 0.12,
+        Paint()..color = Colors.white.withValues(alpha: 0.85),
+      );
+    }
+  }
+
+  /// Sliding wall with a clear travel track and a hot leading edge.
+  void _paintSliders(Canvas canvas, BoardView view) {
+    for (final slider in level.sliders) {
+      final rect = view.toScreenRect(slider.rectAt(sim.time));
+      final color = settings.colorblind ? AppColors.amber : AppColors.ice;
+
+      // Travel track and end stops.
+      final base = view.toScreen(slider.base);
+      final axis = slider.slidesVertically ? const Offset(0, 1) : const Offset(1, 0);
+      final halfTrack = view.px(slider.amplitude);
+      final track = Paint()
+        ..color = color.withValues(alpha: 0.13)
+        ..strokeWidth = 1.2
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(base - axis * halfTrack, base + axis * halfTrack, track);
+      canvas.drawCircle(base - axis * halfTrack, 2, Paint()..color = color.withValues(alpha: 0.35));
+      canvas.drawCircle(base + axis * halfTrack, 2, Paint()..color = color.withValues(alpha: 0.35));
+
+      final rr = RRect.fromRectAndRadius(
+        rect,
+        Radius.circular(rect.shortestSide * 0.42),
+      );
+      canvas.drawRRect(
+        rr.inflate(view.px(0.05)),
+        Paint()
+          ..color = color.withValues(alpha: 0.18)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.10)),
+      );
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(const Color(0xFF4A2A20), color, 0.35)!,
+              const Color(0xFF120A08),
+            ],
+          ).createShader(rect),
+      );
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4
+          ..color = color.withValues(alpha: 0.72),
+      );
+
+      final horizontal = rect.width >= rect.height;
+      final coreStart = horizontal
+          ? Offset(rect.left + rect.shortestSide * 0.35, rect.center.dy)
+          : Offset(rect.center.dx, rect.top + rect.shortestSide * 0.35);
+      final coreEnd = horizontal
+          ? Offset(rect.right - rect.shortestSide * 0.35, rect.center.dy)
+          : Offset(rect.center.dx, rect.bottom - rect.shortestSide * 0.35);
+      canvas.drawLine(
+        coreStart,
+        coreEnd,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.55)
+          ..strokeWidth = max(1, rect.shortestSide * 0.18)
+          ..strokeCap = StrokeCap.round,
+      );
+      // End pistons on the bar.
+      if (horizontal) {
+        for (final x in [rect.left + rect.shortestSide * 0.3, rect.right - rect.shortestSide * 0.3]) {
+          canvas.drawCircle(
+            Offset(x, rect.center.dy),
+            rect.shortestSide * 0.16,
+            Paint()..color = color.withValues(alpha: 0.9),
+          );
+        }
+      } else {
+        for (final y in [rect.top + rect.shortestSide * 0.3, rect.bottom - rect.shortestSide * 0.3]) {
+          canvas.drawCircle(
+            Offset(rect.center.dx, y),
+            rect.shortestSide * 0.16,
+            Paint()..color = color.withValues(alpha: 0.9),
+          );
+        }
+      }
+    }
+  }
+
+  /// Live rim animation over the cached hole geometry.
+  void _paintHolesLive(Canvas canvas, BoardView view) {
+    for (var i = 0; i < level.holes.length; i++) {
+      final hole = level.holes[i];
+      final center = view.toScreen(hole.center);
+      final radius = view.px(hole.radius);
+      final pulse = settings.reduceMotion
+          ? 0.5
+          : 0.5 + 0.5 * sin(sim.visualTime * 2.2 + i * 1.7);
+
+      // Two rotating warning arcs.
+      final arc = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round
+        ..color = AppColors.danger.withValues(alpha: 0.22 + 0.20 * pulse);
+      for (var k = 0; k < 2; k++) {
+        canvas.drawArc(
+          Rect.fromCircle(center: center, radius: radius * 0.88),
+          sim.visualTime * (k.isEven ? 0.9 : -0.9) + k * pi,
+          pi * 0.55,
+          false,
+          arc,
+        );
+      }
+
+      // Inward suction ticks.
+      final suction = Paint()
+        ..color = Colors.white.withValues(alpha: 0.12 + 0.10 * pulse)
+        ..strokeWidth = 1
+        ..strokeCap = StrokeCap.round;
+      for (var k = 0; k < 5; k++) {
+        final angle = k * (2 * pi / 5) + sim.visualTime * 0.4;
+        final dir = Offset(cos(angle), sin(angle));
+        final outer = radius * 0.95;
+        final inner = radius * (0.72 + 0.08 * sin(sim.visualTime * 3 + k));
+        canvas.drawLine(center + dir * inner, center + dir * outer, suction);
+      }
+    }
   }
 
   void _paintPortals(Canvas canvas, BoardView view) {
@@ -484,6 +1172,206 @@ class ScenePainter extends CustomPainter {
     }
   }
 
+  /// One-way membranes: a bright frame plus animated chevrons that show the
+  /// only direction the marble can pass.
+  void _paintFlowPanels(Canvas canvas, BoardView view) {
+    for (var i = 0; i < level.flowPanels.length; i++) {
+      final panel = level.flowPanels[i];
+      final rect = view.toScreenRect(panel.rect);
+      final rr = RRect.fromRectAndRadius(
+        rect,
+        Radius.circular(rect.shortestSide * 0.5),
+      );
+      final color = settings.colorblind ? AppColors.blue : AppColors.mint;
+      final pulse = settings.reduceMotion
+          ? 0.5
+          : 0.5 + 0.5 * sin(sim.visualTime * 2.2 + i);
+
+      canvas.drawRRect(
+        rr.inflate(view.px(0.05)),
+        Paint()
+          ..color = color.withValues(alpha: 0.16 + pulse * 0.10)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.12)),
+      );
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color.withValues(alpha: 0.55),
+              color.withValues(alpha: 0.16),
+            ],
+          ).createShader(rect),
+      );
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4
+          ..color = color.withValues(alpha: 0.78),
+      );
+
+      // End caps make the membrane read as a physical one-way valve.
+      final vertical = rect.height > rect.width;
+      final cap = Paint()
+        ..color = color.withValues(alpha: 0.95)
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round;
+      if (vertical) {
+        canvas.drawLine(
+          Offset(rect.center.dx, rect.top + 2),
+          Offset(rect.center.dx, rect.bottom - 2),
+          cap,
+        );
+      } else {
+        canvas.drawLine(
+          Offset(rect.left + 2, rect.center.dy),
+          Offset(rect.right - 2, rect.center.dy),
+          cap,
+        );
+      }
+
+      // Chevrons travel with the allowed direction.
+      final dir = panel.direction;
+      final perp = Offset(-dir.dy, dir.dx);
+      final center = view.toScreen(panel.rect.center);
+      final phase = settings.reduceMotion ? 0.35 : (sim.visualTime * 1.25) % 1.0;
+      final arrow = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      for (var k = 0; k < 3; k++) {
+        final along = (-0.26 + k * 0.24 + phase * 0.22) * view.scale;
+        final tipWorld = panel.rect.center +
+            dir * ((along / view.scale) + 0.10);
+        final backWorld = panel.rect.center + dir * (along / view.scale - 0.06);
+        final tip = view.toScreen(tipWorld);
+        final back = view.toScreen(backWorld);
+        final wing = view.px(0.075);
+        final a = back + perp * wing;
+        final b = back - perp * wing;
+        arrow.color = color.withValues(alpha: 0.55 + 0.35 * (k / 2));
+        canvas.drawPath(
+          Path()
+            ..moveTo(a.dx, a.dy)
+            ..lineTo(tip.dx, tip.dy)
+            ..lineTo(b.dx, b.dy),
+          arrow,
+        );
+      }
+      // A faint dot keeps the centre readable when the arrows are mid-cycle.
+      canvas.drawCircle(center, 1.6, Paint()..color = Colors.white.withValues(alpha: 0.55));
+    }
+  }
+
+  /// Cracked wall sections. They stay visibly different from solid walls so a
+  /// speed player can spot the shortcut before committing to it.
+  void _paintBreakables(Canvas canvas, BoardView view) {
+    for (var i = 0; i < level.breakables.length; i++) {
+      final wall = level.breakables[i];
+      if (wall.broken) continue;
+      final rect = view.toScreenRect(wall.rect);
+      final rr = RRect.fromRectAndRadius(
+        rect,
+        Radius.circular(max(2, view.px(Simulation.wallThickness * 0.42))),
+      );
+      final pulse = settings.reduceMotion
+          ? 0.5
+          : 0.5 + 0.5 * sin(sim.visualTime * 2.8 + i * 1.7);
+      // Gold core against orange walls: a breakable section should read as
+      // "hit me" from across the board.
+      final color = AppColors.gold;
+      final glow = AppColors.fracture;
+      final horizontal = wall.rect.width >= wall.rect.height;
+
+      canvas.drawRRect(
+        rr.inflate(view.px(0.07)),
+        Paint()
+          ..color = glow.withValues(alpha: 0.16 + pulse * 0.14)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.15)),
+      );
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0xFF3A2410),
+              const Color(0xFF120A08),
+            ],
+          ).createShader(rect),
+      );
+      canvas.drawRRect(
+        rr,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8
+          ..color = color.withValues(alpha: 0.88),
+      );
+
+      // Three bright dashes along the long axis make it look pre-fractured.
+      final longLen = horizontal ? rect.width : rect.height;
+      final shortLen = horizontal ? rect.height : rect.width;
+      final core = Paint()
+        ..color = color.withValues(alpha: 0.88 + pulse * 0.10)
+        ..strokeWidth = max(1.4, shortLen * 0.38)
+        ..strokeCap = StrokeCap.butt;
+      for (var k = 0; k < 3; k++) {
+        final a = 0.16 + k * 0.28;
+        final b = a + 0.15;
+        final p0 = horizontal
+            ? Offset(rect.left + longLen * a, rect.center.dy)
+            : Offset(rect.center.dx, rect.top + longLen * a);
+        final p1 = horizontal
+            ? Offset(rect.left + longLen * b, rect.center.dy)
+            : Offset(rect.center.dx, rect.top + longLen * b);
+        canvas.drawLine(p0, p1, core);
+      }
+
+      final rnd = Random(wall.from.x * 131 + wall.from.y * 17 + i * 7);
+      final crack = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white.withValues(alpha: 0.40 + pulse * 0.20);
+      for (var c = 0; c < 4; c++) {
+        final start = Offset(
+          rect.left + rect.width * (0.18 + rnd.nextDouble() * 0.64),
+          rect.top + rect.height * (0.12 + rnd.nextDouble() * 0.76),
+        );
+        final path = Path()..moveTo(start.dx, start.dy);
+        var p = start;
+        for (var s = 0; s < 3; s++) {
+          p += Offset(
+            (rnd.nextDouble() - 0.5) * rect.width * 0.34,
+            (rnd.nextDouble() - 0.5) * rect.height * 0.34,
+          );
+          path.lineTo(p.dx, p.dy);
+        }
+        canvas.drawPath(path, crack);
+      }
+
+      // Warning diamond at the impact point.
+      final diamond = max(6.0, shortLen * 0.92);
+      canvas.save();
+      canvas.translate(rect.center.dx, rect.center.dy);
+      canvas.rotate(pi / 4);
+      canvas.drawRect(
+        Rect.fromCenter(center: Offset.zero, width: diamond, height: diamond),
+        Paint()..color = color.withValues(alpha: 0.92),
+      );
+      canvas.drawRect(
+        Rect.fromCenter(center: Offset.zero, width: diamond * 0.42, height: diamond * 0.42),
+        Paint()..color = const Color(0xFF120A08),
+      );
+      canvas.restore();
+    }
+  }
+
   void _paintOrbs(Canvas canvas, BoardView view) {
     for (var i = 0; i < level.orbs.length; i++) {
       if (sim.collected.contains(i)) continue;
@@ -522,53 +1410,60 @@ class ScenePainter extends CustomPainter {
 
   void _paintGates(Canvas canvas, BoardView view) {
     for (final gate in level.gates) {
-      final active = gate.isActive(sim.time);
-      final rect = view.toScreenRect(gate.rectAt(sim.time));
-      final rr = RRect.fromRectAndRadius(rect, Radius.circular(rect.shortestSide * 0.5));
+      final solid = gate.solidity(sim.time);
+      final railRect = view.toScreenRect(gate.rectAt(sim.time));
+      final rail = RRect.fromRectAndRadius(
+        railRect,
+        Radius.circular(railRect.shortestSide * 0.5),
+      );
 
-      if (!active) {
-        // Powered-down state: a ghost rail with end caps and a dotted core.
-        canvas.drawRRect(
-          rr,
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.4
-            ..color = theme.a.withValues(alpha: 0.40),
-        );
-        final vertical = rect.height > rect.width;
-        final cap = Paint()..color = theme.a.withValues(alpha: 0.75);
-        final dots = Paint()..color = theme.a.withValues(alpha: 0.55);
-        if (vertical) {
-          canvas.drawCircle(Offset(rect.center.dx, rect.top + 3), 2.6, cap);
-          canvas.drawCircle(Offset(rect.center.dx, rect.bottom - 3), 2.6, cap);
-          for (var i = 1; i <= 3; i++) {
-            final y = rect.top + rect.height * i / 4;
-            canvas.drawCircle(Offset(rect.center.dx, y), 1.6, dots);
-          }
-        } else {
-          canvas.drawCircle(Offset(rect.left + 3, rect.center.dy), 2.6, cap);
-          canvas.drawCircle(Offset(rect.right - 3, rect.center.dy), 2.6, cap);
-          for (var i = 1; i <= 3; i++) {
-            final x = rect.left + rect.width * i / 4;
-            canvas.drawCircle(Offset(x, rect.center.dy), 1.6, dots);
-          }
+      // The rail is always visible, so the player can read the timing track
+      // even when the barrier has powered down.
+      canvas.drawRRect(
+        rail,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.3
+          ..color = theme.a.withValues(alpha: 0.22 + 0.20 * (1 - solid)),
+      );
+      final vertical = railRect.height > railRect.width;
+      final cap = Paint()..color = theme.a.withValues(alpha: 0.72);
+      final dots = Paint()..color = theme.a.withValues(alpha: 0.48);
+      if (vertical) {
+        canvas.drawCircle(Offset(railRect.center.dx, railRect.top + 3), 2.4, cap);
+        canvas.drawCircle(Offset(railRect.center.dx, railRect.bottom - 3), 2.4, cap);
+        for (var i = 1; i <= 3; i++) {
+          final y = railRect.top + railRect.height * i / 4;
+          canvas.drawCircle(Offset(railRect.center.dx, y), 1.5, dots);
         }
-        continue;
+      } else {
+        canvas.drawCircle(Offset(railRect.left + 3, railRect.center.dy), 2.4, cap);
+        canvas.drawCircle(Offset(railRect.right - 3, railRect.center.dy), 2.4, cap);
+        for (var i = 1; i <= 3; i++) {
+          final x = railRect.left + railRect.width * i / 4;
+          canvas.drawCircle(Offset(x, railRect.center.dy), 1.5, dots);
+        }
       }
 
+      if (solid <= 0.02) continue;
+
+      // The barrier itself grows out of the rail as solidity rises. This reads
+      // as a machine charging rather than a wall snapping on.
+      final rect = view.toScreenRect(gate.collisionRectAt(sim.time));
+      final rr = RRect.fromRectAndRadius(rect, Radius.circular(rect.shortestSide * 0.5));
       canvas.drawRRect(
-        rr,
+        rr.inflate(view.px(0.06)),
         Paint()
-          ..color = AppColors.danger.withValues(alpha: 0.38)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.10)),
+          ..color = AppColors.danger.withValues(alpha: 0.10 + 0.24 * solid)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.12)),
       );
       canvas.drawRRect(
         rr,
         Paint()
           ..shader = LinearGradient(
             colors: [
-              AppColors.danger.withValues(alpha: 0.95),
-              AppColors.amber.withValues(alpha: 0.9),
+              AppColors.danger.withValues(alpha: 0.35 + 0.60 * solid),
+              AppColors.amber.withValues(alpha: 0.30 + 0.60 * solid),
             ],
           ).createShader(rect),
       );
@@ -577,7 +1472,7 @@ class ScenePainter extends CustomPainter {
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1
-          ..color = Colors.white.withValues(alpha: 0.5),
+          ..color = Colors.white.withValues(alpha: 0.25 + 0.35 * solid),
       );
     }
   }
@@ -637,17 +1532,43 @@ class ScenePainter extends CustomPainter {
   void _paintTrail(Canvas canvas, BoardView view) {
     if (settings.reduceMotion) return;
     final trail = sim.trail;
-    for (var i = 0; i < trail.length; i++) {
-      final t = i / trail.length;
-      final p = view.toScreen(trail[i]);
-      final r = view.px(_marbleWorldRadius) * (0.25 + t * 0.7);
-      canvas.drawCircle(
-        p,
-        r,
-        Paint()
-          ..color = theme.a.withValues(alpha: 0.05 + t * 0.12)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.6),
+    if (trail.length < 2) return;
+
+    // A tapered ribbon reads direction far better than a row of equal dots.
+    final speedT = (sim.speed / Simulation.maxSpeed).clamp(0.0, 1.0);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    for (var i = 1; i < trail.length; i++) {
+      final t = i / (trail.length - 1);
+      paint
+        ..color = theme.a.withValues(alpha: (0.025 + t * 0.17) * (0.45 + speedT * 0.55))
+        ..strokeWidth = max(1.0, view.px(0.018 + 0.125 * t));
+      canvas.drawLine(
+        view.toScreen(trail[i - 1]),
+        view.toScreen(trail[i]),
+        paint,
       );
+    }
+
+    // Speed streaks behind a fast marble, kept subtle so the board stays clear.
+    if (speedT > 0.35 && sim.velocity.distance > 0.1) {
+      final dir = sim.velocity / sim.velocity.distance;
+      final perp = Offset(-dir.dy, dir.dx);
+      final ball = view.toScreen(sim.ball);
+      final streak = Paint()
+        ..color = Colors.white.withValues(alpha: 0.10 + speedT * 0.12)
+        ..strokeWidth = 1
+        ..strokeCap = StrokeCap.round;
+      for (var k = -1; k <= 1; k++) {
+        final offset = perp * (k * view.px(0.085));
+        final len = view.px(0.35 + speedT * 0.55);
+        canvas.drawLine(
+          ball - dir * view.px(0.24) + offset,
+          ball - dir * (view.px(0.24) + len) + offset,
+          streak,
+        );
+      }
     }
   }
 
@@ -687,14 +1608,26 @@ class ScenePainter extends CustomPainter {
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.45),
     );
 
-    // Outer aura.
+    // Outer aura grows with speed, so the marble reads as energetic without
+    // adding contact effects.
+    final speedT = (sim.speed / Simulation.maxSpeed).clamp(0.0, 1.0);
     canvas.drawCircle(
       c,
-      r * 1.55,
+      r * (1.55 + speedT * 0.30),
       Paint()
-        ..color = theme.a.withValues(alpha: 0.24)
+        ..color = theme.a.withValues(alpha: 0.20 + speedT * 0.18)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.8),
     );
+    if (speedT > 0.4) {
+      canvas.drawCircle(
+        c,
+        r * (1.12 + speedT * 0.14),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = Colors.white.withValues(alpha: 0.08 + speedT * 0.12),
+      );
+    }
 
     // Glass body.
     final centerLight = c + Offset(-tiltValue.dx * r * 0.35, -tiltValue.dy * r * 0.35);

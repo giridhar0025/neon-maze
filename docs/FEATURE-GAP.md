@@ -31,7 +31,7 @@ beyond a touch fallback.
    by the genre, not a copy of their name, art, or level data.
 2. **No ads, no IAP, no network** in v1. Removes the consent/age/ad SDK surface and makes
    the game fully offline.
-3. **Depth over one mechanic** — seven mechanics across six chapters.
+3. **Depth over one mechanic** — eleven mechanics across eight chapters.
 4. **Respect the player** — instant retry, no fail screens that punish, pause-safe timer,
    persistent bests, and full control over feel.
 
@@ -40,14 +40,17 @@ beyond a touch fallback.
 | Mechanic | Why it is better |
 |---|---|
 | Energy orbs (collect all to open exit) | Turns "walk to exit" into routing decisions |
-| Ice zones | Speed/risk management, drift control |
-| Tar zones | Teaches momentum and escape lines |
 | Pulse gates | Timing puzzle: solid barriers cycle dark and become passable |
 | Bumpers | Redirects at speed, enables shortcut play |
 | Portals | Spatial reasoning, signature "wow" moment |
+| One-way flow panels | Route planning: enter with the arrows or not at all |
+| Conveyor belts | Directional force changes the line and rewards reading the floor |
+| Sliding walls | Timing puzzle with a moving gap instead of an on/off barrier |
+| Magnets | Attract/repel fields that bend the route and reward tilt control |
+| Breakable walls | Risk/reward shortcuts that reward a fast run-up |
 | Blackout | Light radius around marble; tension without jumpscares |
 | Star tiers + par times | Replayability with a clear skill goal |
-| Wall-impact haptics + sparks | Physical feedback the original lacks |
+| Soft wall bounce, silent grazes | Physical but never sticky or noisy |
 | Ghost best-run trail | Visible self-competition |
 
 ## UX we add
@@ -73,7 +76,7 @@ beyond a touch fallback.
 | Promise | Where it lives |
 |---|---|
 | Seeded maze generation, solvable by construction | `lib/game/maze.dart`, `lib/game/levels.dart` |
-| Seven mechanics + 60-level curve | `lib/game/levels.dart`, tested in `test/levels_test.dart` |
+| Eleven mechanics + 80-level curve | `lib/game/levels.dart`, tested in `test/levels_test.dart` |
 | Circle/AABB physics with sub-stepping | `lib/game/simulation.dart` |
 | Calibrated tilt, dead zone, presets, auto-zero | `lib/game/tilt.dart`, `lib/ui/settings_screen.dart` |
 | Cached neon board + live glass marble | `lib/render/scene_painter.dart` |

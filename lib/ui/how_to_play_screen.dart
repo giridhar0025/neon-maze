@@ -80,11 +80,27 @@ class HowToPlayScreen extends StatelessWidget {
                         icon: Icons.blur_on_rounded,
                         title: 'Read the board',
                         body:
-                            'Collect every energy orb to unlock the exit. Avoid holes and bumpers. Gates pulse: bright is solid, dark is passable. Ice has no grip; tar kills momentum.',
+                            'Collect every energy orb to unlock the exit. Avoid holes. Gates pulse: bright is solid, dark is passable. Belts push; bumpers redirect; magnets pull or shove.',
                         color: AppColors.gold,
                       ),
                       const _Step(
                         number: '04',
+                        icon: Icons.bolt_rounded,
+                        title: 'Open new paths',
+                        body:
+                            'Flow panels only pass with the arrows. Cracked walls shatter on a hard hit and open a shortcut. Both reward planning the entry line, not just speed.',
+                        color: AppColors.fracture,
+                      ),
+                      const _Step(
+                        number: '05',
+                        icon: Icons.settings_input_component_rounded,
+                        title: 'Work the machinery',
+                        body:
+                            'Conveyor belts push you along, sliding walls sweep a gap across the corridor, and magnets pull or shove. Read the motion first, then choose your line.',
+                        color: AppColors.cyan,
+                      ),
+                      const _Step(
+                        number: '06',
                         icon: Icons.timer_outlined,
                         title: 'Chase three stars',
                         body:

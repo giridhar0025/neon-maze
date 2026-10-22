@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
-/// Throttled haptic feedback so a marble scraping a wall doesn't buzz forever.
+/// Throttled haptic feedback so repeated bumper and breakable impacts do not
+/// buzz forever. Wall grazes are intentionally silent.
 class Haptics {
   Haptics({this.enabled = true});
 

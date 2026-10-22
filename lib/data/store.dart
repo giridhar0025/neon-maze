@@ -226,8 +226,13 @@ class AppStore extends ChangeNotifier {
 
   int bestMsFor(int levelId) => _records[levelId]?.bestMs ?? 0;
 
-  /// Levels unlock sequentially: the first unplayed level is available.
+  /// Testing build: every level is open so layouts and mechanics can be
+  /// reached without grinding the unlock chain. Flip this off for release.
+  static const bool unlockAllLevels = true;
+
+  /// Levels unlock sequentially in release; testing opens the full catalog.
   bool isUnlocked(int levelId) {
+    if (unlockAllLevels) return true;
     if (levelId <= 0) return true;
     // Every level up to the first uncleared one is open, plus one beyond it.
     var streak = 0;

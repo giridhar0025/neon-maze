@@ -193,15 +193,11 @@ class _GameScreenState extends State<GameScreen>
   void _consumeEvents() {
     for (final event in _sim.drainEvents()) {
       switch (event.type) {
-        case SimEventType.wallHit:
+        case SimEventType.breakWall:
           _haptics.bump(event.strength);
-          _sfx.play(SfxNames.bump, volume: (event.strength / 5).clamp(0.15, 0.55));
-          final dir = _sim.velocity.distance < 0.1
-              ? const Offset(0, -1)
-              : _sim.velocity / _sim.velocity.distance;
-          if (!widget.store.settings.reduceMotion) {
-            _particles.impact(event.position, -dir, _theme.a, event.strength);
-          }
+          _sfx.play(SfxNames.bump, volume: 0.65);
+          _particles.burst(event.position, AppColors.amber, count: 18, speed: 2.8, streak: true);
+          _particles.burst(event.position, _theme.b, count: 10, speed: 1.6);
         case SimEventType.orb:
           _haptics.orb();
           _sfx.play(SfxNames.orb);
@@ -486,14 +482,17 @@ class _GameScreenState extends State<GameScreen>
               ],
             ),
             const Spacer(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 6,
               children: [
                 _ModeChip(
                   touchMode: _tilt.touchMode || !_tilt.sensorAvailable,
                   onTap: _toggleTouchMode,
                 ),
-                const SizedBox(width: 8),
+                _MechanicChip(spec: _spec, accent: _theme.a),
                 _InfoChip(label: 'PAR ${formatDuration(_spec.parMs)}'),
               ],
             ),
@@ -616,6 +615,7 @@ class _GameScreenState extends State<GameScreen>
             spec: _spec,
             theme: _theme,
             result: _result!,
+            isChapterEnd: _spec.indexInChapter == LevelCatalog.levelsPerChapter - 1,
             onNext: _nextLevel,
             onReplay: _restart,
             onMap: _goToChapters,
@@ -664,36 +664,60 @@ class _TimerChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final overPar = milliseconds > parMs;
+    final progress = (milliseconds / (parMs <= 0 ? 1 : parMs)).clamp(0.0, 1.0);
+    final paceColor = overPar
+        ? AppColors.danger
+        : progress > 0.78
+            ? AppColors.amber
+            : accent;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 7),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
         color: AppColors.bg.withValues(alpha: 0.55),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: overPar ? AppColors.danger : accent,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: paceColor,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                formatDuration(milliseconds),
+                style: AppText.display(
+                  17,
+                  weight: 600,
+                  letterSpacing: 0.4,
+                  color: overPar ? AppColors.danger : AppColors.ink,
+                ),
+              ),
+              const SizedBox(width: 3),
+              Text('s', style: AppText.body(10, color: AppColors.inkFaint)),
+            ],
+          ),
+          const SizedBox(height: 5),
+          SizedBox(
+            width: 68,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 2,
+                backgroundColor: Colors.white.withValues(alpha: 0.07),
+                valueColor: AlwaysStoppedAnimation(paceColor),
+              ),
             ),
           ),
-          const SizedBox(width: 8),
-          Text(
-            formatDuration(milliseconds),
-            style: AppText.display(
-              17,
-              weight: 600,
-              letterSpacing: 0.4,
-              color: overPar ? AppColors.danger : AppColors.ink,
-            ),
-          ),
-          const SizedBox(width: 3),
-          Text('s', style: AppText.body(10, color: AppColors.inkFaint)),
         ],
       ),
     );
@@ -773,6 +797,68 @@ class _ModeChip extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _MechanicChip extends StatelessWidget {
+  const _MechanicChip({required this.spec, required this.accent});
+
+  final LevelSpec spec;
+  final Color accent;
+
+  IconData get _icon => switch (spec.mechanicIcon) {
+        'blackout' => Icons.visibility_off_rounded,
+        'magnet' => Icons.radar_rounded,
+        'slider' => Icons.swap_horiz_rounded,
+        'conveyor' => Icons.fast_forward_rounded,
+        'fracture' => Icons.bolt_rounded,
+        'flow' => Icons.arrow_forward_rounded,
+        'portal' => Icons.sync_alt_rounded,
+        'gate' => Icons.power_settings_new_rounded,
+        'surface' => Icons.ac_unit_rounded,
+        'orb' => Icons.blur_on_rounded,
+        _ => Icons.blur_circular_rounded,
+      };
+
+  String get _label => switch (spec.mechanicIcon) {
+        'blackout' => 'BLACKOUT',
+        'magnet' => 'MAGNETS',
+        'slider' => 'SLIDER',
+        'conveyor' => 'BELT',
+        'fracture' => 'BREAKABLE',
+        'flow' => 'FLOW',
+        'portal' => 'PORTALS',
+        'gate' => 'GATES',
+        'surface' => spec.iceZones > 0 && spec.tarZones > 0
+            ? 'ICE + TAR'
+            : spec.iceZones > 0
+                ? 'ICE'
+                : 'TAR',
+        'orb' => 'ORBS',
+        _ => 'HOLES',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: accent.withValues(alpha: 0.07),
+        border: Border.all(color: accent.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(_icon, size: 13, color: accent),
+          const SizedBox(width: 5),
+          Text(
+            _label,
+            style: AppText.body(9.5, weight: 700, color: accent, letterSpacing: 0.9),
+          ),
+        ],
       ),
     );
   }
@@ -1099,6 +1185,7 @@ class _WinOverlay extends StatelessWidget {
     required this.spec,
     required this.theme,
     required this.result,
+    required this.isChapterEnd,
     required this.onNext,
     required this.onReplay,
     required this.onMap,
@@ -1107,6 +1194,7 @@ class _WinOverlay extends StatelessWidget {
   final LevelSpec spec;
   final ChapterTheme theme;
   final _GameResult result;
+  final bool isChapterEnd;
   final VoidCallback onNext;
   final VoidCallback onReplay;
   final VoidCallback onMap;
@@ -1125,11 +1213,22 @@ class _WinOverlay extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    result.isBest ? 'NEW BEST' : 'ESCAPED',
+                    isChapterEnd
+                        ? 'CHAPTER CLEAR'
+                        : result.isBest
+                            ? 'NEW BEST'
+                            : 'ESCAPED',
                     style: AppText.display(15, color: theme.a, letterSpacing: 4),
                   ),
                   const SizedBox(height: 6),
                   Text('LEVEL ${spec.number}', style: AppText.display(46, letterSpacing: 2)),
+                  if (isChapterEnd) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '${theme.name}  ·  ${theme.subtitle}',
+                      style: AppText.body(11, color: theme.a, weight: 600, letterSpacing: 1.2),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   TweenAnimationBuilder<double>(
                     tween: Tween(begin: 0, end: 1),
@@ -1157,7 +1256,11 @@ class _WinOverlay extends StatelessWidget {
                   ),
                   const SizedBox(height: 22),
                   NeonButton(
-                    label: spec.id + 1 >= LevelCatalog.total ? 'FINISH' : 'NEXT LEVEL',
+                    label: spec.id + 1 >= LevelCatalog.total
+                        ? 'FINISH'
+                        : isChapterEnd
+                            ? 'NEXT CHAPTER'
+                            : 'NEXT LEVEL',
                     icon: Icons.arrow_forward_rounded,
                     accent: theme.a,
                     onTap: onNext,

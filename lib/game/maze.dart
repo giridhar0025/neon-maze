@@ -243,6 +243,24 @@ class Maze {
     return boxes;
   }
 
+  /// The exact collision box for the wall between (x, y) and its neighbour in
+  /// [d]. Returns null when the edge is outside the board or already open.
+  /// This is used to punch breakable sections out of the static wall set.
+  Rect? wallBoxAt(int x, int y, Dir d, double thickness) {
+    if (!inside(x + d.dx, y + d.dy) || !hasWall(x, y, d)) return null;
+    final t = thickness;
+    switch (d) {
+      case Dir.north:
+        return Rect.fromLTRB(x - t / 2, y - t / 2, x + 1 + t / 2, y + t / 2);
+      case Dir.south:
+        return Rect.fromLTRB(x - t / 2, y + 1 - t / 2, x + 1 + t / 2, y + 1 + t / 2);
+      case Dir.west:
+        return Rect.fromLTRB(x - t / 2, y - t / 2, x + t / 2, y + 1 + t / 2);
+      case Dir.east:
+        return Rect.fromLTRB(x + 1 - t / 2, y - t / 2, x + 1 + t / 2, y + 1 + t / 2);
+    }
+  }
+
   /// Walls as segments, for rendering crisp edges rather than boxes.
   List<Rect> wallSegments(double thickness) {
     final t = thickness;

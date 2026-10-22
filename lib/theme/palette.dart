@@ -24,6 +24,8 @@ class AppColors {
   static const danger = Color(0xFFFF5C7A);
   static const ice = Color(0xFF6FD3FF);
   static const tar = Color(0xFF8B5CF6);
+  static const flow = Color(0xFF5CFF9D);
+  static const fracture = Color(0xFFFF7A45);
 }
 
 /// Per-chapter identity: two accent colors used across board, UI and glow.
@@ -66,13 +68,13 @@ class ChapterTheme {
       tip: "Every orb must be collected before the exit unlocks. Safe route beats short route.",
     ),
     ChapterTheme(
-      name: 'GLACIER',
-      subtitle: 'No grip, all nerve',
+      name: 'MOMENTUM',
+      subtitle: 'Ride the push',
       a: AppColors.ice,
       b: AppColors.cyan,
       hazard: AppColors.danger,
-      mechanic: 'Ice + tar',
-      tip: "Ice removes grip and tar removes speed. Feather the tilt and leave yourself an exit line.",
+      mechanic: 'Belts + bumpers',
+      tip: "Conveyor belts push you along and bumpers redirect you. Use the force instead of fighting it.",
     ),
     ChapterTheme(
       name: 'PULSE',
@@ -93,13 +95,31 @@ class ChapterTheme {
       tip: "Portals preserve momentum. Enter fast, then adjust the moment you come out the other side.",
     ),
     ChapterTheme(
+      name: 'FLOW',
+      subtitle: 'Go with the arrows',
+      a: AppColors.flow,
+      b: AppColors.cyan,
+      hazard: AppColors.danger,
+      mechanic: 'One-way panels + belts',
+      tip: "Flow panels only let you pass with the arrows, and conveyor belts shove you along. Plan the entry line because the return trip is closed.",
+    ),
+    ChapterTheme(
+      name: 'FRACTURE',
+      subtitle: 'Break the short way',
+      a: AppColors.fracture,
+      b: AppColors.amber,
+      hazard: AppColors.danger,
+      mechanic: 'Breakable walls + sliders',
+      tip: "Cracked walls open when you hit them hard; sliding bars sweep a gap across the corridor. Time the gap, then smash the shortcut.",
+    ),
+    ChapterTheme(
       name: 'BLACKOUT',
       subtitle: 'Trust the glow',
       a: AppColors.mint,
-      b: AppColors.cyan,
+      b: AppColors.violet,
       hazard: AppColors.danger,
-      mechanic: 'Darkness + bumpers',
-      tip: "Light shrinks to the marble. Memorise the route, then move with short deliberate tilts.",
+      mechanic: 'Darkness + magnets',
+      tip: "Light shrinks to the marble and magnets pull or shove. Memorise the route, then move with short deliberate tilts.",
     ),
   ];
 
