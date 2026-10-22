@@ -153,6 +153,8 @@ class AppStore extends ChangeNotifier {
   static const _kSettings = 'nm.settings.v1';
   static const _kTutorial = 'nm.tutorial.v1';
   static const _kLast = 'nm.last.v1';
+  static const _kSettingsVersion = 'nm.settingsVersion';
+  static const int _settingsVersion = 3;
 
   final SharedPreferences _prefs;
   final Map<int, LevelRecord> _records;
@@ -187,6 +189,22 @@ class AppStore extends ChangeNotifier {
       } catch (_) {
         settings = const GameSettings();
       }
+    }
+
+    // Physics was retuned; old sensitivity values and a stale calibration can
+    // make the marble feel wrong. Migrate the *feel* settings once, preserving
+    // progress, sound, haptics and accessibility choices.
+    final storedVersion = prefs.getInt(_kSettingsVersion) ?? 0;
+    if (storedVersion < _settingsVersion) {
+      settings = settings.copyWith(
+        preset: SensitivityPreset.medium,
+        gainAdjust: 0.0,
+        deadzone: const GameSettings().deadzone,
+        calX: 0.0,
+        calY: 0.0,
+      );
+      await prefs.setString(_kSettings, jsonEncode(settings.toJson()));
+      await prefs.setInt(_kSettingsVersion, _settingsVersion);
     }
 
     return AppStore._(

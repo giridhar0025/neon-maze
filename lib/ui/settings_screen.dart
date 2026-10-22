@@ -109,6 +109,22 @@ class SettingsScreen extends StatelessWidget {
                                   display: '${(settings.deadzone * 100).round()}%',
                                   onChanged: (v) => store.updateSettings(settings.copyWith(deadzone: v)),
                                 ),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton(
+                                    onPressed: () => store.updateSettings(settings.copyWith(
+                                      preset: SensitivityPreset.medium,
+                                      gainAdjust: 0.0,
+                                      deadzone: const GameSettings().deadzone,
+                                      invertX: false,
+                                      invertY: false,
+                                    )),
+                                    child: Text(
+                                      'Reset feel to defaults',
+                                      style: AppText.body(11.5, color: AppColors.inkFaint),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),

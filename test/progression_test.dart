@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neon_maze/data/store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,6 +47,27 @@ void main() {
     expect(worse, isFalse);
     expect(store.bestMsFor(0), 9000);
     expect(store.starsFor(0), 3, reason: 'stars never regress');
+  });
+
+  test('old feel settings migrate to sane defaults once', () async {
+    SharedPreferences.setMockInitialValues({
+      'flutter.nm.settings.v1': jsonEncode(
+        const GameSettings(
+          preset: SensitivityPreset.expert,
+          gainAdjust: 0.3,
+          deadzone: 0.09,
+          calX: 0.2,
+          calY: -0.1,
+        ).toJson(),
+      ),
+    });
+
+    final store = await AppStore.load();
+    expect(store.settings.preset, SensitivityPreset.medium);
+    expect(store.settings.gainAdjust, 0.0);
+    expect(store.settings.deadzone, closeTo(0.025, 1e-9));
+    expect(store.settings.calX, 0.0);
+    expect(store.settings.calY, 0.0);
   });
 
   test('settings round-trip through persistence', () async {
