@@ -392,25 +392,27 @@ class BoardRenderer {
     // disconnected. Filling the wall rectangles instead means neighbours
     // overlap over their full thickness: joints are seamless by construction
     // and nothing can paint outside the collision box.
-    final shell = Path();
     final body = Path();
     final hot = Path();
     for (final segment in segments) {
       final rect = view.toScreenRect(segment);
-      shell.addRect(rect.inflate(0.7));
       body.addRect(rect);
       final horizontal = segment.width >= segment.height;
-      // Overlap by ~1px along the run so neighbouring highlights join up.
+      // The highlight runs past each end by a wall thickness so it reaches the
+      // highlight of the wall it meets at a corner or a T. It is clipped to the
+      // body below, so the extension closes the joint without ever poking out
+      // of a dead end or painting a bright tab over the wall.
+      final reach = view.px(t);
       final inner = horizontal
           ? Rect.fromCenter(
               center: rect.center,
-              width: rect.width + 1.0,
-              height: max(1.0, rect.height * 0.42),
+              width: rect.width + reach * 2,
+              height: max(1.0, rect.height * 0.44),
             )
           : Rect.fromCenter(
               center: rect.center,
-              width: max(1.0, rect.width * 0.42),
-              height: rect.height + 1.0,
+              width: max(1.0, rect.width * 0.44),
+              height: rect.height + reach * 2,
             );
       hot.addRect(inner);
     }
@@ -421,11 +423,13 @@ class BoardRenderer {
         ..color = accent.withValues(alpha: 0.26)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.20)),
     );
-    canvas.drawPath(shell, Paint()..color = const Color(0xFF05080F));
     canvas.drawPath(body, Paint()..color = accent);
     // Opaque, so overlapping highlights at a joint cannot stack into a bright
-    // blob: the corner simply reads as the same wall material.
+    // blob, and clipped to the wall body so the core cannot spill past an end.
+    canvas.save();
+    canvas.clipPath(body, doAntiAlias: true);
     canvas.drawPath(hot, Paint()..color = Color.lerp(accent, Colors.white, 0.55)!);
+    canvas.restore();
   }
 }
 
