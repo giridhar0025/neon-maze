@@ -107,7 +107,7 @@ class TiltController extends ChangeNotifier {
       _filtered = clamped;
       _calibrated = true;
     } else {
-      _filtered = Offset.lerp(_filtered, clamped, 0.32)!;
+      _filtered = Offset.lerp(_filtered, clamped, 0.42)!;
     }
     notifyListeners();
   }

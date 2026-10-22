@@ -91,8 +91,16 @@ tool/                        generator scripts for audio and app icons
 ```
 
 **Why no physics package?** A marble versus static boxes is a small, well-understood
-problem. Doing it directly gives deterministic tests, predictable feel at 60/120 Hz, zero
-native dependencies, and full control over restitution, friction and portal momentum.
+problem. Doing it directly gives deterministic tests, zero native dependencies, and full
+control over feel.
+
+The simulation runs at a **fixed 240 Hz** with an accumulator, so 60/90/120 Hz displays
+produce the same trajectory and a dropped frame cannot tunnel through a wall. Gravity is
+projected from the tilt vector; rolling resistance is linear plus a small quadratic drag.
+Wall contact applies restitution and tangential friction **only on a real impact**, so
+grazing a wall slides instead of sticking. `rollAngle`/`rollDirection` drive visible
+surface flecks on the marble, which is what makes it read as a rolling ball rather than
+a sliding dot.
 
 **Rendering cost.** The board (background, walls, holes, ice, tar, exit base) is rendered
 once per level/size into a `ui.Image` via `Picture.toImageSync`, then blitted each frame.

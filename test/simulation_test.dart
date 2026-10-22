@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neon_maze/game/levels.dart';
+import 'package:neon_maze/game/maze.dart';
 import 'package:neon_maze/game/simulation.dart' as game;
 
 void main() {
@@ -75,6 +76,84 @@ void main() {
     final states = [for (var i = 0; i < 160; i++) gate.isActive(i / 40)];
     expect(states.where((active) => active).length, greaterThan(20));
     expect(states.where((active) => !active).length, greaterThan(20));
+  });
+
+  test('fixed timestep is independent of frame rate', () {
+    final level = LevelRuntime.build(LevelCatalog.byId(12));
+    final sixty = game.Simulation(level);
+    final twoForty = game.Simulation(level);
+
+    sixty.step(1 / 60, const Offset(0.6, 0.25));
+    for (var i = 0; i < 4; i++) {
+      twoForty.step(1 / 240, const Offset(0.6, 0.25));
+    }
+
+    expect(sixty.ball.dx, closeTo(twoForty.ball.dx, 1e-9));
+    expect(sixty.ball.dy, closeTo(twoForty.ball.dy, 1e-9));
+    expect(sixty.velocity.dx, closeTo(twoForty.velocity.dx, 1e-9));
+    expect(sixty.velocity.dy, closeTo(twoForty.velocity.dy, 1e-9));
+  });
+
+  test('rolling angle advances in the direction of travel', () {
+    final level = LevelRuntime.build(LevelCatalog.byId(0));
+    final sim = game.Simulation(level);
+    sim.ball = level.start;
+    sim.velocity = Offset.zero;
+
+    for (var i = 0; i < 12; i++) {
+      sim.step(1 / 60, const Offset(1, 0));
+    }
+
+    expect(sim.rollAngle, greaterThan(0.02));
+    expect(sim.rollDirection.dx, greaterThan(0.8));
+    expect(sim.rollDirection.distance, closeTo(1.0, 1e-6));
+  });
+
+  test('grazing a wall keeps most of the tangential speed', () {
+    // Top-left start, top wall is always solid. Find a level whose start opens
+    // east so the marble can slide along that wall.
+    final level = LevelCatalog.all
+        .map(LevelRuntime.build)
+        .firstWhere((runtime) => !runtime.maze.hasWall(0, 0, Dir.east));
+
+    final sim = game.Simulation(level);
+    sim.ball = level.start;
+    sim.velocity = const Offset(3, 0);
+
+    for (var i = 0; i < 18; i++) {
+      // Press into the top wall while moving along it.
+      sim.step(1 / 60, const Offset(0, -1));
+    }
+
+    expect(sim.speed, greaterThan(1.8),
+        reason: 'wall sliding should not scrub off most of the speed');
+  });
+
+  test('the marble settles when the board is level and still', () {
+    final level = LevelRuntime.build(LevelCatalog.byId(0));
+    final sim = game.Simulation(level);
+    sim.ball = level.start;
+    sim.velocity = const Offset(0.35, 0);
+
+    for (var i = 0; i < 120; i++) {
+      sim.step(1 / 60, Offset.zero);
+    }
+
+    expect(sim.speed, lessThan(0.15));
+  });
+
+  test('speed never exceeds the cap', () {
+    final level = LevelRuntime.build(LevelCatalog.byId(20));
+    final sim = game.Simulation(level);
+    sim.ball = level.start;
+
+    for (var i = 0; i < 240; i++) {
+      sim.step(1 / 60, const Offset(1, 0.4));
+      expect(sim.speed, lessThanOrEqualTo(game.Simulation.maxSpeed + 1e-6));
+      if (sim.fell || sim.won) {
+        sim.reset();
+      }
+    }
   });
 
   test('reset restores start, orbs and flags', () {

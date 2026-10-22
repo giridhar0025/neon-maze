@@ -522,8 +522,8 @@ class ScenePainter extends CustomPainter {
 
   void _paintGates(Canvas canvas, BoardView view) {
     for (final gate in level.gates) {
-      final active = gate.isActive(sim.visualTime);
-      final rect = view.toScreenRect(gate.rectAt(sim.visualTime));
+      final active = gate.isActive(sim.time);
+      final rect = view.toScreenRect(gate.rectAt(sim.time));
       final rr = RRect.fromRectAndRadius(rect, Radius.circular(rect.shortestSide * 0.5));
 
       if (!active) {
@@ -717,6 +717,9 @@ class ScenePainter extends CustomPainter {
         ).createShader(Rect.fromCircle(center: c, radius: r)),
     );
 
+    // Visible rolling: two surface flecks orbit the sphere as it rolls.
+    _paintRollTexture(canvas, c, r);
+
     // Refraction crescent.
     canvas.drawArc(
       Rect.fromCircle(center: c, radius: r * 0.78),
@@ -751,6 +754,40 @@ class ScenePainter extends CustomPainter {
         ..strokeWidth = 1.2
         ..color = Colors.white.withValues(alpha: 0.7),
     );
+  }
+
+  void _paintRollTexture(Canvas canvas, Offset c, double r) {
+    final dir = sim.rollDirection;
+    final perp = Offset(-dir.dy, dir.dx);
+    final phase = sim.rollAngle;
+
+    canvas.save();
+    canvas.clipPath(Path()..addOval(Rect.fromCircle(center: c, radius: r * 0.94)));
+    final fleck = Paint()..color = Colors.white.withValues(alpha: 0.20);
+    for (var k = 0; k < 2; k++) {
+      final angle = phase + k * pi;
+      final offset =
+          dir * (sin(angle) * r * 0.52) + perp * (cos(angle) * r * 0.26);
+      canvas.drawCircle(c + offset, r * 0.11, fleck);
+    }
+    canvas.restore();
+
+    // A subtle vein rotates with the surface, not with the camera.
+    canvas.save();
+    canvas.translate(c.dx, c.dy);
+    canvas.rotate(phase * 0.5);
+    canvas.drawArc(
+      Rect.fromCircle(center: Offset.zero, radius: r * 0.60),
+      -0.5,
+      1.7,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = max(1, r * 0.05)
+        ..strokeCap = StrokeCap.round
+        ..color = Colors.white.withValues(alpha: 0.13),
+    );
+    canvas.restore();
   }
 
   void _paintBlackout(Canvas canvas, BoardView view, Size size) {
