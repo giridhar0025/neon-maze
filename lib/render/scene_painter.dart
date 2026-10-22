@@ -384,60 +384,48 @@ class BoardRenderer {
         .toList();
     final accent = theme.a;
 
-    // Plain walls: one solid casing, one continuous neon core. No panel seams,
-    // divider ribs, joint collars or bolts — a wall is a single filled form.
-    final fill = Paint()..color = const Color(0xFF060C15);
-    final halo = Paint()
-      ..color = accent.withValues(alpha: 0.20)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.34));
-    final tube = Paint()
-      ..color = accent.withValues(alpha: 0.38)
-      ..strokeWidth = view.px(t * 1.12)
-      ..strokeCap = StrokeCap.round
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.16));
-    final core = Paint()
-      ..color = accent
-      ..strokeWidth = view.px(t * 0.88)
-      ..strokeCap = StrokeCap.round;
-    final hot = Paint()
-      ..color = Colors.white.withValues(alpha: 0.50)
-      ..strokeWidth = max(1.0, view.px(t * 0.26))
-      ..strokeCap = StrokeCap.round;
-    final half = view.px(t * 0.5);
-
-    // The casing: every wall rect goes into one path, so adjacent edges merge
-    // into a single solid shape with no gaps to read as dividers.
-    final shell = Path();
-    for (final segment in segments) {
-      shell.addRect(view.toScreenRect(segment));
-    }
-    canvas.drawPath(shell, halo);
-    canvas.drawPath(shell, fill);
-
-    // The neon body: one thick round-capped line per segment, extended by half
-    // the wall thickness so corners and Ts close up completely. Three passes
-    // give the wall a soft bloom, a saturated core and a hot centre line.
+    // Walls are filled rectangles, not stroked lines.
     //
-    // Everything below is clipped to the casing. The caps and the extension
-    // are what close the joints, but at a dead end they would poke out of the
-    // wall's footprint into the corridor — the clip makes the wall stop
-    // exactly where its collision box stops.
-    canvas.save();
-    canvas.clipPath(shell, doAntiAlias: true);
-    for (final paint in [tube, core, hot]) {
-      for (final segment in segments) {
-        final rect = view.toScreenRect(segment);
-        final horizontal = segment.width >= segment.height;
-        final a = horizontal
-            ? Offset(rect.left - half, rect.center.dy)
-            : Offset(rect.center.dx, rect.top - half);
-        final b = horizontal
-            ? Offset(rect.right + half, rect.center.dy)
-            : Offset(rect.center.dx, rect.bottom + half);
-        canvas.drawLine(a, b, paint);
-      }
+    // A stroke has to be extended past its ends and round-capped to close a
+    // joint, which is exactly what made the ends overshoot the wall; clipping
+    // that back then cut the joint open again and the network looked
+    // disconnected. Filling the wall rectangles instead means neighbours
+    // overlap over their full thickness: joints are seamless by construction
+    // and nothing can paint outside the collision box.
+    final shell = Path();
+    final body = Path();
+    final hot = Path();
+    for (final segment in segments) {
+      final rect = view.toScreenRect(segment);
+      shell.addRect(rect.inflate(0.7));
+      body.addRect(rect);
+      final horizontal = segment.width >= segment.height;
+      // Overlap by ~1px along the run so neighbouring highlights join up.
+      final inner = horizontal
+          ? Rect.fromCenter(
+              center: rect.center,
+              width: rect.width + 1.0,
+              height: max(1.0, rect.height * 0.42),
+            )
+          : Rect.fromCenter(
+              center: rect.center,
+              width: max(1.0, rect.width * 0.42),
+              height: rect.height + 1.0,
+            );
+      hot.addRect(inner);
     }
-    canvas.restore();
+
+    canvas.drawPath(
+      body,
+      Paint()
+        ..color = accent.withValues(alpha: 0.26)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.20)),
+    );
+    canvas.drawPath(shell, Paint()..color = const Color(0xFF05080F));
+    canvas.drawPath(body, Paint()..color = accent);
+    // Opaque, so overlapping highlights at a joint cannot stack into a bright
+    // blob: the corner simply reads as the same wall material.
+    canvas.drawPath(hot, Paint()..color = Color.lerp(accent, Colors.white, 0.55)!);
   }
 }
 

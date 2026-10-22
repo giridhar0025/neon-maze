@@ -288,7 +288,7 @@ class Gate {
     required this.amplitude,
     required this.speed,
     required this.phase,
-    this.halfLong = 0.44,
+    this.halfLong = 0.42,
     this.halfThin = 0.05,
   });
 
@@ -396,7 +396,7 @@ class Slider {
     required this.amplitude,
     required this.speed,
     required this.phase,
-    this.halfLong = 0.22,
+    this.halfLong = 0.19,
     this.halfThin = 0.095,
   });
 
@@ -533,13 +533,32 @@ class LevelRuntime {
       }
     }
     holeCandidates.shuffle(rnd);
+    // Holes must never sit on the route (that would make the level
+    // impossible), but a hole buried at the end of a long dead end is
+    // decoration the player never meets. Prefer cells that touch the route, so
+    // the drop is in view and one bad line ends the run.
+    final nearRoute = <Cell>[];
+    final offRoute = <Cell>[];
+    for (final cell in holeCandidates) {
+      var touchesRoute = false;
+      for (final d in Dir.values) {
+        final n = maze.neighbor(cell.x, cell.y, d);
+        if (n != null && pathSet.contains(maze.indexOf(n.x, n.y))) {
+          touchesRoute = true;
+          break;
+        }
+      }
+      (touchesRoute ? nearRoute : offRoute).add(cell);
+    }
     final holes = <Hole>[];
-    for (final cell in holeCandidates.take(spec.holes)) {
+    for (final cell in [...nearRoute, ...offRoute].take(spec.holes)) {
+      // Small jitter and a smaller radius keep the hole inside its own cell, so
+      // the dark well never overlaps a wall.
       final jitter = Offset(
-        (rnd.nextDouble() - 0.5) * 0.28,
-        (rnd.nextDouble() - 0.5) * 0.28,
+        (rnd.nextDouble() - 0.5) * 0.16,
+        (rnd.nextDouble() - 0.5) * 0.16,
       );
-      holes.add(Hole(cell.center + jitter, 0.30 + rnd.nextDouble() * 0.05));
+      holes.add(Hole(cell.center + jitter, 0.27 + rnd.nextDouble() * 0.04));
     }
     final holeCells = {for (final h in holes) maze.indexOf(h.center.dx.floor(), h.center.dy.floor())};
 
@@ -763,8 +782,9 @@ class LevelRuntime {
         base: cell.center,
         // Horizontal corridor -> vertical bar that slides up/down.
         slidesVertically: horizontal,
-        // A longer sweep and a faster bar leave a smaller gap to time.
-        amplitude: 0.30,
+        // 0.19 + 0.20 = 0.39, inside the 0.43 corridor half-width, so the bar
+        // sweeps a real gap without cutting into the walls.
+        amplitude: 0.20,
         speed: 1.65 + rnd.nextDouble() * 0.50,
         phase: rnd.nextDouble() * pi * 2,
       ));
@@ -862,18 +882,42 @@ class LevelRuntime {
       portals.add(PortalPair(a.center, b.center));
     }
 
+    // Bumpers go on the route, not in dead ends: a post the player never
+    // touches is not a mechanic. Each one hugs a wall of its corridor and is
+    // sized so a gap always remains on the other side — a post that spans the
+    // corridor is just a wall.
     final bumpers = <Bumper>[];
-    final bumperCandidates = holeCandidates
-        .where((c) => !holeCells.contains(maze.indexOf(c.x, c.y)))
-        .where((c) => !orbCells.contains(maze.indexOf(c.x, c.y)))
-        .where((c) => !portals.any((p) => (p.a - c.center).distance < 1.2 || (p.b - c.center).distance < 1.2))
-        .where((c) => !breakables.any((w) => (w.rect.center - c.center).distance < 1.2))
-        .toList()
-      ..shuffle(rnd);
-    for (final cell in bumperCandidates.take(spec.bumpers)) {
-      // A small post the marble can actually get past: a post wider than the
-      // corridor is a wall, not a bumper.
-      bumpers.add(Bumper(cell.center, 0.13));
+    final bumperCells = <Cell>[];
+    for (var i = 3; i < solution.length - 4; i++) {
+      if (bumpers.length >= spec.bumpers) break;
+      final cell = solution[i];
+      final idx = maze.indexOf(cell.x, cell.y);
+      if (holeCells.contains(idx) || orbCells.contains(idx)) continue;
+      if (gateCells.contains(cell) ||
+          flowCells.contains(cell) ||
+          conveyorCells.contains(cell) ||
+          sliderCells.contains(cell)) {
+        continue;
+      }
+      if (bumperCells.any((c) => (c.center - cell.center).distance < 2.0)) {
+        continue;
+      }
+      final open = <Dir>[
+        for (final d in Dir.values)
+          if (!maze.hasWall(cell.x, cell.y, d)) d,
+      ];
+      if (open.length != 2) continue;
+      final horizontal = open.contains(Dir.east) && open.contains(Dir.west);
+      final vertical = open.contains(Dir.north) && open.contains(Dir.south);
+      if (!horizontal && !vertical) continue;
+
+      // Pressed against one wall. 0.30 + 0.09 = 0.39 stays inside the 0.43
+      // corridor half-width, and the marble keeps a 0.26 band on the far side
+      // to squeeze through — tight enough to matter, wide enough to be fair.
+      final side = rnd.nextBool() ? 0.30 : -0.30;
+      final offset = horizontal ? Offset(0, side) : Offset(side, 0);
+      bumperCells.add(cell);
+      bumpers.add(Bumper(cell.center + offset, 0.09));
     }
 
     // Magnets sit on the route so their pull or push changes the line through
@@ -888,7 +932,8 @@ class LevelRuntime {
       if (gateCells.contains(cell) ||
           flowCells.contains(cell) ||
           conveyorCells.contains(cell) ||
-          sliderCells.contains(cell)) {
+          sliderCells.contains(cell) ||
+          bumperCells.contains(cell)) {
         continue;
       }
       if (magnetCells.any((c) => (c.center - cell.center).distance < 2.2)) continue;
