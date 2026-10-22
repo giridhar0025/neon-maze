@@ -384,52 +384,94 @@ class BoardRenderer {
         .toList();
     final accent = theme.a;
 
-    // Walls are filled rectangles, not stroked lines.
+    // Walls are stroked with round caps and round joins — that is what gives
+    // them the soft, rounded ends and the seamless curved corners.
     //
-    // A stroke has to be extended past its ends and round-capped to close a
-    // joint, which is exactly what made the ends overshoot the wall; clipping
-    // that back then cut the joint open again and the network looked
-    // disconnected. Filling the wall rectangles instead means neighbours
-    // overlap over their full thickness: joints are seamless by construction
-    // and nothing can paint outside the collision box.
-    final body = Path();
-    final hot = Path();
+    // The overshoot is handled per end instead of globally: an end that is
+    // shared with another wall is pushed *into* the joint so the two round caps
+    // fuse, while a free end stops half a stroke short so its cap lands exactly
+    // on the collision edge. Round geometry, zero spill.
+    final joints = <String, int>{};
+    String keyOf(Offset p) =>
+        '${(p.dx * 1000).round()}:${(p.dy * 1000).round()}';
+    final posts = <(Offset, Offset)>[];
     for (final segment in segments) {
-      final rect = view.toScreenRect(segment);
-      body.addRect(rect);
       final horizontal = segment.width >= segment.height;
-      // The highlight runs past each end by a wall thickness so it reaches the
-      // highlight of the wall it meets at a corner or a T. It is clipped to the
-      // body below, so the extension closes the joint without ever poking out
-      // of a dead end or painting a bright tab over the wall.
-      final reach = view.px(t);
-      final inner = horizontal
-          ? Rect.fromCenter(
-              center: rect.center,
-              width: rect.width + reach * 2,
-              height: max(1.0, rect.height * 0.44),
-            )
-          : Rect.fromCenter(
-              center: rect.center,
-              width: max(1.0, rect.width * 0.44),
-              height: rect.height + reach * 2,
-            );
-      hot.addRect(inner);
+      final a = horizontal
+          ? Offset(segment.left, segment.center.dy)
+          : Offset(segment.center.dx, segment.top);
+      final b = horizontal
+          ? Offset(segment.right, segment.center.dy)
+          : Offset(segment.center.dx, segment.bottom);
+      posts.add((a, b));
+      joints[keyOf(a)] = (joints[keyOf(a)] ?? 0) + 1;
+      joints[keyOf(b)] = (joints[keyOf(b)] ?? 0) + 1;
     }
 
+    // Solid casing under the neon so the glow has an edge to sit against.
+    final shell = Path();
+    for (final segment in segments) {
+      shell.addRect(view.toScreenRect(segment));
+    }
     canvas.drawPath(
-      body,
+      shell,
       Paint()
-        ..color = accent.withValues(alpha: 0.26)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.20)),
+        ..color = accent.withValues(alpha: 0.22)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.30)),
     );
-    canvas.drawPath(body, Paint()..color = accent);
-    // Opaque, so overlapping highlights at a joint cannot stack into a bright
-    // blob, and clipped to the wall body so the core cannot spill past an end.
-    canvas.save();
-    canvas.clipPath(body, doAntiAlias: true);
-    canvas.drawPath(hot, Paint()..color = Color.lerp(accent, Colors.white, 0.55)!);
-    canvas.restore();
+    canvas.drawPath(shell, Paint()..color = const Color(0xFF05080F));
+
+    final tubeWidth = view.px(t) * 1.14;
+    final coreWidth = view.px(t) * 0.86;
+    final hotWidth = max(1.0, view.px(t) * 0.30);
+
+    void strokeWalls(double width, Paint paint) {
+      final path = Path();
+      for (final (a, b) in posts) {
+        final start = view.toScreen(a);
+        final end = view.toScreen(b);
+        final delta = end - start;
+        final length = delta.distance;
+        if (length < 1e-6) continue;
+        final dir = delta / length;
+        // A shared end runs right up to the lattice point: the two round caps
+        // overlap there and fuse into a curved corner. A free end stops half a
+        // stroke short, so its cap lands exactly on the collision edge.
+        final head = (joints[keyOf(a)] ?? 1) > 1 ? 0.0 : width / 2;
+        final tail = (joints[keyOf(b)] ?? 1) > 1 ? 0.0 : width / 2;
+        final p0 = start + dir * head;
+        final p1 = end - dir * tail;
+        path.moveTo(p0.dx, p0.dy);
+        path.lineTo(p1.dx, p1.dy);
+      }
+      canvas.drawPath(path, paint);
+    }
+
+    strokeWalls(
+      tubeWidth,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..color = accent.withValues(alpha: 0.34)
+        ..strokeWidth = tubeWidth
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, view.px(0.14)),
+    );
+    strokeWalls(
+      coreWidth,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..color = accent
+        ..strokeWidth = coreWidth
+        ..strokeCap = StrokeCap.round,
+    );
+    strokeWalls(
+      hotWidth,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..color = Color.lerp(accent, Colors.white, 0.55)!
+        ..strokeWidth = hotWidth
+        ..strokeCap = StrokeCap.round,
+    );
   }
 }
 
