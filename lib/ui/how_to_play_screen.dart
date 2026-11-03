@@ -18,125 +18,160 @@ class HowToPlayScreen extends StatelessWidget {
       body: Stack(
         children: [
           const Positioned.fill(
-            child: NebulaBackground(accent: AppColors.cyan, secondary: AppColors.violet),
+            child: NebulaBackground(
+              accent: AppColors.cyan,
+              secondary: AppColors.violet,
+            ),
           ),
           SafeArea(
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 540),
                 child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 6, 16, 0),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.arrow_back_rounded),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 6, 16, 0),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.arrow_back_rounded),
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            'HOW TO PLAY',
+                            style: AppText.display(18, letterSpacing: 2.2),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 2),
-                      Text('HOW TO PLAY', style: AppText.display(18, letterSpacing: 2.2)),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-                    children: [
-                      Center(
-                        child: GlowMarble(size: 120, accent: AppColors.cyan, secondary: AppColors.mint),
-                      ),
-                      const SizedBox(height: 18),
-                      Text(
-                        'Your phone is the maze.',
-                        textAlign: TextAlign.center,
-                        style: AppText.display(26, letterSpacing: -0.4),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tilt to roll the marble. The board tilts with you, gravity does the rest.',
-                        textAlign: TextAlign.center,
-                        style: AppText.body(14, height: 1.5),
-                      ),
-                      const SizedBox(height: 26),
-                      const _Step(
-                        number: '01',
-                        icon: Icons.screen_rotation_alt_rounded,
-                        title: 'Calibrate once',
-                        body:
-                            'Hold your phone flat, face up, and tap Calibrate. This becomes your level. Do it again whenever you change posture.',
-                        color: AppColors.cyan,
-                      ),
-                      const _Step(
-                        number: '02',
-                        icon: Icons.open_with_rounded,
-                        title: 'Tilt to travel',
-                        body:
-                            'Small tilts give fine control. Big tilts build speed. Drag on the board at any time to switch to touch steering.',
-                        color: AppColors.magenta,
-                      ),
-                      const _Step(
-                        number: '03',
-                        icon: Icons.blur_on_rounded,
-                        title: 'Read the board',
-                        body:
-                            'Collect every energy orb to unlock the exit. Avoid holes. Gates pulse: bright is solid, dark is passable. Belts push; bumpers redirect; magnets pull or shove.',
-                        color: AppColors.gold,
-                      ),
-                      const _Step(
-                        number: '04',
-                        icon: Icons.bolt_rounded,
-                        title: 'Open new paths',
-                        body:
-                            'Flow panels only pass with the arrows. Cracked walls shatter on a hard hit and open a shortcut. Both reward planning the entry line, not just speed.',
-                        color: AppColors.fracture,
-                      ),
-                      const _Step(
-                        number: '05',
-                        icon: Icons.settings_input_component_rounded,
-                        title: 'Work the machinery',
-                        body:
-                            'Conveyor belts push you along, sliding walls sweep a gap across the corridor, and magnets pull or shove. Read the motion first, then choose your line.',
-                        color: AppColors.cyan,
-                      ),
-                      const _Step(
-                        number: '06',
-                        icon: Icons.timer_outlined,
-                        title: 'Chase three stars',
-                        body:
-                            'Each level has a par time. Beat it for three stars, then push for a faster personal best.',
-                        color: AppColors.mint,
-                      ),
-                      const SizedBox(height: 12),
-                      GlassCard(
-                        accent: AppColors.danger,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(Icons.vibration_rounded, color: AppColors.danger, size: 20),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'No gyroscope? No problem. Drag anywhere on the maze, or use arrow keys on desktop. '
-                                'You can tune sensitivity and dead zone any time from the pause menu.',
-                                style: AppText.body(13, height: 1.45),
+                    ),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+                        children: [
+                          Center(
+                            child: GlowMarble(
+                              size: 120,
+                              accent: AppColors.cyan,
+                              secondary: AppColors.mint,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            'Your phone is the maze.',
+                            textAlign: TextAlign.center,
+                            style: AppText.display(26, letterSpacing: -0.4),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Tilt to roll the marble. The board tilts with you, gravity does the rest.',
+                            textAlign: TextAlign.center,
+                            style: AppText.body(14, height: 1.5),
+                          ),
+                          const SizedBox(height: 26),
+                          const _Step(
+                            number: '01',
+                            icon: Icons.screen_rotation_alt_rounded,
+                            title: 'Calibrate once',
+                            body:
+                                'Hold your phone flat, face up, and tap Calibrate. This becomes your level. Do it again whenever you change posture.',
+                            color: AppColors.cyan,
+                          ),
+                          const _Step(
+                            number: '02',
+                            icon: Icons.open_with_rounded,
+                            title: 'Tilt to travel',
+                            body:
+                                'Small tilts give fine control. Big tilts build speed. Drag on the board at any time to switch to touch steering.',
+                            color: AppColors.magenta,
+                          ),
+                          const _Step(
+                            number: '03',
+                            icon: Icons.blur_on_rounded,
+                            title: 'Read the board',
+                            body:
+                                'Collect every energy orb to unlock the exit. Avoid holes and violet tar. Gates pulse: bright is solid, dark is passable. Belts push; bumpers redirect; magnets pull or shove.',
+                            color: AppColors.gold,
+                          ),
+                          const _Step(
+                            number: '04',
+                            icon: Icons.bolt_rounded,
+                            title: 'Open new paths',
+                            body:
+                                'Flow panels only pass with the arrows. Cracked walls shatter on a hard hit and open a shortcut. Both reward planning the entry line, not just speed.',
+                            color: AppColors.fracture,
+                          ),
+                          const _Step(
+                            number: '05',
+                            icon: Icons.settings_input_component_rounded,
+                            title: 'Work the machinery',
+                            body:
+                                'Conveyor belts push with or against your line, sliding walls sweep a gap across the corridor, and magnets pull or shove. Read the motion first, then choose your line.',
+                            color: AppColors.cyan,
+                          ),
+                          const _Step(
+                            number: '06',
+                            icon: Icons.shield_rounded,
+                            title: 'Grab superpowers',
+                            body:
+                                'Charge badges sit on optional detours. Drive over one to add it to your three-slot belt, then tap the slot when you need it: Shield absorbs a fall, Magnet vacuums orbs, Phase ignores gates, Slow calms the moving hazards, Reveal lights the dark.',
+                            color: AppColors.mint,
+                          ),
+                          const _Step(
+                            number: '07',
+                            icon: Icons.calendar_month_rounded,
+                            title: 'Come back daily',
+                            body:
+                                'A new seeded challenge every day pays sparks and builds a streak. Three daily missions also reset at midnight. Sparks unlock cosmetic marble finishes in the Marble Lab.',
+                            color: AppColors.gold,
+                          ),
+                          const _Step(
+                            number: '08',
+                            icon: Icons.timer_outlined,
+                            title: 'Chase three stars',
+                            body:
+                                'Each level has a par time. Beat it for three stars, then push for a faster personal best. Eight chapters, one hundred levels each.',
+                            color: AppColors.mint,
+                          ),
+                          const SizedBox(height: 12),
+                          GlassCard(
+                            accent: AppColors.danger,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.vibration_rounded,
+                                  color: AppColors.danger,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'No gyroscope? No problem. Drag anywhere on the maze, or use arrow keys on desktop. '
+                                    'You can tune sensitivity and dead zone any time from the pause menu.',
+                                    style: AppText.body(13, height: 1.45),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 22),
+                          NeonButton(
+                            label: 'START PLAYING',
+                            icon: Icons.play_arrow_rounded,
+                            onTap: () => Navigator.of(context).pushReplacement(
+                              neonRoute(
+                                GameScreen(
+                                  levelId: store.continueLevelId,
+                                  store: store,
+                                ),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 22),
-                      NeonButton(
-                        label: 'START PLAYING',
-                        icon: Icons.play_arrow_rounded,
-                        onTap: () => Navigator.of(context).pushReplacement(
-                          neonRoute(GameScreen(levelId: store.continueLevelId, store: store)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -189,10 +224,25 @@ class _Step extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(number, style: AppText.body(10, weight: 700, color: color, letterSpacing: 1.4)),
+                      Text(
+                        number,
+                        style: AppText.body(
+                          10,
+                          weight: 700,
+                          color: color,
+                          letterSpacing: 1.4,
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(title, style: AppText.display(16, weight: 600, letterSpacing: 0.1)),
+                        child: Text(
+                          title,
+                          style: AppText.display(
+                            16,
+                            weight: 600,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
                       ),
                     ],
                   ),

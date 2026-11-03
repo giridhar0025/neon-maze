@@ -6,13 +6,19 @@ import 'package:flutter/material.dart' hide Simulation;
 import '../data/store.dart';
 import '../game/levels.dart';
 import '../game/particles.dart';
+import '../game/powerups.dart';
 import '../game/simulation.dart';
 import '../game/tilt.dart';
 import '../theme/palette.dart';
+import '../theme/skins.dart';
 
 /// Screen-space mapping from world units (1 cell = 1 unit) to pixels.
 class BoardView {
-  const BoardView({required this.scale, required this.origin, required this.size});
+  const BoardView({
+    required this.scale,
+    required this.origin,
+    required this.size,
+  });
 
   final double scale;
   final Offset origin;
@@ -21,11 +27,11 @@ class BoardView {
   Offset toScreen(Offset world) => origin + world * scale;
 
   Rect toScreenRect(Rect world) => Rect.fromLTRB(
-        origin.dx + world.left * scale,
-        origin.dy + world.top * scale,
-        origin.dx + world.right * scale,
-        origin.dy + world.bottom * scale,
-      );
+    origin.dx + world.left * scale,
+    origin.dy + world.top * scale,
+    origin.dx + world.right * scale,
+    origin.dy + world.bottom * scale,
+  );
 
   double px(double world) => world * scale;
 }
@@ -111,7 +117,10 @@ class BoardRenderer {
         radius,
         Paint()
           ..shader = RadialGradient(
-            colors: [blob.$2.withValues(alpha: blob.$4), Colors.transparent],
+            colors: [
+              blob.$2.withValues(alpha: blob.$4),
+              Colors.transparent,
+            ],
           ).createShader(Rect.fromCircle(center: blob.$1, radius: radius)),
       );
     }
@@ -129,7 +138,12 @@ class BoardRenderer {
 
     // Ambient bloom behind the board.
     final boardRect = view.toScreenRect(
-      Rect.fromLTWH(0, 0, level.spec.cols.toDouble(), level.spec.rows.toDouble()),
+      Rect.fromLTWH(
+        0,
+        0,
+        level.spec.cols.toDouble(),
+        level.spec.rows.toDouble(),
+      ),
     );
     canvas.drawRect(
       boardRect.inflate(view.px(1.2)),
@@ -175,7 +189,11 @@ class BoardRenderer {
     final dotPaint = Paint()..color = Colors.white.withValues(alpha: 0.035);
     for (var y = 0; y < level.spec.rows; y++) {
       for (var x = 0; x < level.spec.cols; x++) {
-        canvas.drawCircle(view.toScreen(Offset(x + 0.5, y + 0.5)), 1.1, dotPaint);
+        canvas.drawCircle(
+          view.toScreen(Offset(x + 0.5, y + 0.5)),
+          1.1,
+          dotPaint,
+        );
       }
     }
 
@@ -208,8 +226,14 @@ class BoardRenderer {
         ..strokeWidth = 1.2
         ..strokeCap = StrokeCap.round;
       for (var k = 0; k < 3; k++) {
-        final o = rect.topLeft + Offset(rect.width * (0.18 + k * 0.26), rect.height * 0.12);
-        canvas.drawLine(o, o + Offset(rect.width * 0.12, rect.height * 0.22), sheen);
+        final o =
+            rect.topLeft +
+            Offset(rect.width * (0.18 + k * 0.26), rect.height * 0.12);
+        canvas.drawLine(
+          o,
+          o + Offset(rect.width * 0.12, rect.height * 0.22),
+          sheen,
+        );
       }
     }
 
@@ -521,6 +545,7 @@ class ScenePainter extends CustomPainter {
       Paint()..filterQuality = FilterQuality.medium,
     );
 
+    _paintTarLive(canvas, view);
     _paintConveyors(canvas, view);
     _paintMagnets(canvas, view);
     _paintPortals(canvas, view);
@@ -528,15 +553,47 @@ class ScenePainter extends CustomPainter {
     _paintBumpers(canvas, view);
     _paintSliders(canvas, view);
     _paintBreakables(canvas, view);
+    _paintPowerUps(canvas, view);
     _paintOrbs(canvas, view);
     _paintGates(canvas, view);
     _paintHolesLive(canvas, view);
     _paintExit(canvas, view);
     _paintTrail(canvas, view);
     _paintParticles(canvas, view);
+    if (!sim.fell) _paintPowerAura(canvas, view);
     if (!sim.fell) _paintMarble(canvas, view);
     if (level.spec.blackout) _paintBlackout(canvas, view, size);
     _paintVignette(canvas, size);
+  }
+
+  /// Live bubbles make the late-game tar detours read as viscous floor rather
+  /// than another dark pit. The static pool is cached; only the highlights move.
+  void _paintTarLive(Canvas canvas, BoardView view) {
+    if (level.tar.isEmpty) return;
+    final t = sim.visualTime;
+    for (var i = 0; i < level.tar.length; i++) {
+      final rect = view.toScreenRect(level.tar[i].rect);
+      for (var k = 0; k < 3; k++) {
+        final phase = t * (0.55 + k * 0.12) + i * 1.7 + k * 2.1;
+        final center = Offset(
+          rect.center.dx + sin(phase) * rect.width * 0.23,
+          rect.center.dy + cos(phase * 0.83) * rect.height * 0.21,
+        );
+        final radius = view.px(0.030 + 0.016 * ((sin(phase * 1.37) + 1) / 2));
+        canvas.drawCircle(
+          center,
+          radius * 2.6,
+          Paint()
+            ..color = AppColors.violet.withValues(alpha: 0.20)
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, radius * 1.8),
+        );
+        canvas.drawCircle(
+          center,
+          radius,
+          Paint()..color = Colors.white.withValues(alpha: 0.30),
+        );
+      }
+    }
   }
 
   /// Floor belts. The base is a tinted pad; the chevrons show which way it is
@@ -762,7 +819,9 @@ class ScenePainter extends CustomPainter {
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.2
-          ..color = Colors.white.withValues(alpha: 0.28 + 0.15 * pulse + 0.35 * hit),
+          ..color = Colors.white.withValues(
+            alpha: 0.28 + 0.15 * pulse + 0.35 * hit,
+          ),
       );
 
       // Expanding shockwave, only while the flash is fresh.
@@ -814,15 +873,25 @@ class ScenePainter extends CustomPainter {
 
       // Travel track and end stops.
       final base = view.toScreen(slider.base);
-      final axis = slider.slidesVertically ? const Offset(0, 1) : const Offset(1, 0);
+      final axis = slider.slidesVertically
+          ? const Offset(0, 1)
+          : const Offset(1, 0);
       final halfTrack = view.px(slider.amplitude);
       final track = Paint()
         ..color = color.withValues(alpha: 0.13)
         ..strokeWidth = 1.2
         ..strokeCap = StrokeCap.round;
       canvas.drawLine(base - axis * halfTrack, base + axis * halfTrack, track);
-      canvas.drawCircle(base - axis * halfTrack, 2, Paint()..color = color.withValues(alpha: 0.35));
-      canvas.drawCircle(base + axis * halfTrack, 2, Paint()..color = color.withValues(alpha: 0.35));
+      canvas.drawCircle(
+        base - axis * halfTrack,
+        2,
+        Paint()..color = color.withValues(alpha: 0.35),
+      );
+      canvas.drawCircle(
+        base + axis * halfTrack,
+        2,
+        Paint()..color = color.withValues(alpha: 0.35),
+      );
 
       final rr = RRect.fromRectAndRadius(
         rect,
@@ -871,7 +940,10 @@ class ScenePainter extends CustomPainter {
       );
       // End pistons on the bar.
       if (horizontal) {
-        for (final x in [rect.left + rect.shortestSide * 0.3, rect.right - rect.shortestSide * 0.3]) {
+        for (final x in [
+          rect.left + rect.shortestSide * 0.3,
+          rect.right - rect.shortestSide * 0.3,
+        ]) {
           canvas.drawCircle(
             Offset(x, rect.center.dy),
             rect.shortestSide * 0.16,
@@ -879,7 +951,10 @@ class ScenePainter extends CustomPainter {
           );
         }
       } else {
-        for (final y in [rect.top + rect.shortestSide * 0.3, rect.bottom - rect.shortestSide * 0.3]) {
+        for (final y in [
+          rect.top + rect.shortestSide * 0.3,
+          rect.bottom - rect.shortestSide * 0.3,
+        ]) {
           canvas.drawCircle(
             Offset(rect.center.dx, y),
             rect.shortestSide * 0.16,
@@ -1036,7 +1111,9 @@ class ScenePainter extends CustomPainter {
       final dir = panel.direction;
       final perp = Offset(-dir.dy, dir.dx);
       final center = view.toScreen(panel.rect.center);
-      final phase = settings.reduceMotion ? 0.35 : (sim.visualTime * 1.25) % 1.0;
+      final phase = settings.reduceMotion
+          ? 0.35
+          : (sim.visualTime * 1.25) % 1.0;
       final arrow = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
@@ -1044,8 +1121,8 @@ class ScenePainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round;
       for (var k = 0; k < 3; k++) {
         final along = (-0.26 + k * 0.24 + phase * 0.22) * view.scale;
-        final tipWorld = panel.rect.center +
-            dir * ((along / view.scale) + 0.10);
+        final tipWorld =
+            panel.rect.center + dir * ((along / view.scale) + 0.10);
         final backWorld = panel.rect.center + dir * (along / view.scale - 0.06);
         final tip = view.toScreen(tipWorld);
         final back = view.toScreen(backWorld);
@@ -1062,7 +1139,11 @@ class ScenePainter extends CustomPainter {
         );
       }
       // A faint dot keeps the centre readable when the arrows are mid-cycle.
-      canvas.drawCircle(center, 1.6, Paint()..color = Colors.white.withValues(alpha: 0.55));
+      canvas.drawCircle(
+        center,
+        1.6,
+        Paint()..color = Colors.white.withValues(alpha: 0.55),
+      );
     }
   }
 
@@ -1098,10 +1179,7 @@ class ScenePainter extends CustomPainter {
           ..shader = LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              const Color(0xFF3A2410),
-              const Color(0xFF120A08),
-            ],
+            colors: [const Color(0xFF3A2410), const Color(0xFF120A08)],
           ).createShader(rect),
       );
       canvas.drawRRect(
@@ -1164,10 +1242,181 @@ class ScenePainter extends CustomPainter {
         Paint()..color = color.withValues(alpha: 0.92),
       );
       canvas.drawRect(
-        Rect.fromCenter(center: Offset.zero, width: diamond * 0.42, height: diamond * 0.42),
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: diamond * 0.42,
+          height: diamond * 0.42,
+        ),
         Paint()..color = const Color(0xFF120A08),
       );
       canvas.restore();
+    }
+  }
+
+  /// Pickups are drawn as rotating charge badges so they never read as orbs.
+  void _paintPowerUps(Canvas canvas, BoardView view) {
+    for (var i = 0; i < level.powerUps.length; i++) {
+      if (sim.collectedPowerUps.contains(i)) continue;
+      final pickup = level.powerUps[i];
+      final def = pickup.type.def;
+      final bob = settings.reduceMotion
+          ? 0.0
+          : sin(sim.visualTime * 2.4 + i) * view.px(0.025);
+      final c = view.toScreen(pickup.center) + Offset(0, bob);
+      final r = view.px(kPowerUpRadius);
+      final pulse = settings.reduceMotion
+          ? 0.0
+          : 0.5 + 0.5 * sin(sim.visualTime * 3.1 + i);
+
+      canvas.drawCircle(
+        c,
+        r * (2.2 + pulse * 0.25),
+        Paint()
+          ..color = def.color.withValues(alpha: 0.18)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 1.2),
+      );
+
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.rotate(settings.reduceMotion ? 0.0 : sim.visualTime * 0.9 + i);
+      final badge = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset.zero, width: r * 1.75, height: r * 1.75),
+        Radius.circular(r * 0.42),
+      );
+      canvas.drawRRect(
+        badge,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              def.color.withValues(alpha: 0.92),
+              Color.lerp(def.color, Colors.black, 0.45)!,
+            ],
+          ).createShader(badge.outerRect),
+      );
+      canvas.drawRRect(
+        badge,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.1
+          ..color = Colors.white.withValues(alpha: 0.55),
+      );
+      canvas.rotate(-(settings.reduceMotion ? 0.0 : sim.visualTime * 0.9 + i));
+      _paintPowerGlyph(canvas, r * 0.62, pickup.type, Colors.white);
+      canvas.restore();
+    }
+  }
+
+  void _paintPowerGlyph(
+    Canvas canvas,
+    double r,
+    PowerUpType type,
+    Color color,
+  ) {
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = max(1.1, r * 0.20)
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = color;
+    switch (type) {
+      case PowerUpType.shield:
+        final path = Path()
+          ..moveTo(0, -r * 0.9)
+          ..lineTo(r * 0.78, -r * 0.48)
+          ..lineTo(r * 0.62, r * 0.34)
+          ..quadraticBezierTo(0, r * 0.95, -r * 0.62, r * 0.34)
+          ..lineTo(-r * 0.78, -r * 0.48)
+          ..close();
+        canvas.drawPath(path, stroke);
+        break;
+      case PowerUpType.magnet:
+        canvas.drawArc(
+          Rect.fromCenter(
+            center: Offset(0, -r * 0.08),
+            width: r * 1.55,
+            height: r * 1.4,
+          ),
+          pi,
+          pi,
+          false,
+          stroke,
+        );
+        canvas.drawLine(
+          Offset(-r * 0.78, -r * 0.08),
+          Offset(-r * 0.78, r * 0.58),
+          stroke,
+        );
+        canvas.drawLine(
+          Offset(r * 0.78, -r * 0.08),
+          Offset(r * 0.78, r * 0.58),
+          stroke,
+        );
+        break;
+      case PowerUpType.phase:
+        for (var k = 0; k < 2; k++) {
+          final path = Path()
+            ..moveTo(-r * 0.62, -r * 0.44 + k * r * 0.5)
+            ..lineTo(0, r * 0.06 + k * r * 0.5)
+            ..lineTo(r * 0.62, -r * 0.44 + k * r * 0.5);
+          canvas.drawPath(path, stroke);
+        }
+        break;
+      case PowerUpType.slow:
+        canvas.drawCircle(Offset.zero, r * 0.78, stroke);
+        canvas.drawLine(Offset.zero, Offset(0, -r * 0.48), stroke);
+        canvas.drawLine(Offset.zero, Offset(r * 0.34, 0), stroke);
+        break;
+      case PowerUpType.reveal:
+        final path = Path()
+          ..moveTo(-r * 0.9, 0)
+          ..quadraticBezierTo(0, -r * 0.82, r * 0.9, 0)
+          ..quadraticBezierTo(0, r * 0.82, -r * 0.9, 0);
+        canvas.drawPath(path, stroke);
+        canvas.drawCircle(Offset.zero, r * 0.24, Paint()..color = color);
+        break;
+    }
+  }
+
+  void _paintPowerAura(Canvas canvas, BoardView view) {
+    final c = view.toScreen(sim.ball);
+    final r = view.px(_marbleWorldRadius);
+    final active = <(double, Color)>[
+      if (sim.magnetTimer > 0) (sim.magnetTimer, AppColors.gold),
+      if (sim.phaseTimer > 0) (sim.phaseTimer, AppColors.violet),
+      if (sim.slowTimer > 0) (sim.slowTimer, AppColors.ice),
+      if (sim.revealTimer > 0) (sim.revealTimer, AppColors.cyan),
+    ];
+    for (var i = 0; i < active.length; i++) {
+      final (timer, color) = active[i];
+      final fade = (timer / 1.2).clamp(0.0, 1.0);
+      canvas.drawCircle(
+        c,
+        r * (1.55 + i * 0.22),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4
+          ..color = color.withValues(alpha: 0.35 + fade * 0.35),
+      );
+    }
+    if (sim.shieldCharges > 0) {
+      canvas.drawCircle(
+        c,
+        r * 1.42,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0
+          ..color = AppColors.mint.withValues(alpha: 0.55),
+      );
+      for (var k = 0; k < sim.shieldCharges; k++) {
+        final a = -pi / 2 + k * 0.55;
+        canvas.drawCircle(
+          c + Offset(cos(a), sin(a)) * (r * 1.42),
+          r * 0.13,
+          Paint()..color = AppColors.mint,
+        );
+      }
     }
   }
 
@@ -1175,7 +1424,9 @@ class ScenePainter extends CustomPainter {
     for (var i = 0; i < level.orbs.length; i++) {
       if (sim.collected.contains(i)) continue;
       final orb = level.orbs[i];
-      final bob = settings.reduceMotion ? 0.0 : sin(sim.visualTime * 2.1 + i) * view.px(0.03);
+      final bob = settings.reduceMotion
+          ? 0.0
+          : sin(sim.visualTime * 2.1 + i) * view.px(0.03);
       final c = view.toScreen(orb.center) + Offset(0, bob);
       final r = view.px(orb.radius);
       final core = settings.colorblind ? AppColors.cyan : AppColors.gold;
@@ -1229,15 +1480,31 @@ class ScenePainter extends CustomPainter {
       final cap = Paint()..color = theme.a.withValues(alpha: 0.72);
       final dots = Paint()..color = theme.a.withValues(alpha: 0.48);
       if (vertical) {
-        canvas.drawCircle(Offset(railRect.center.dx, railRect.top + 3), 2.4, cap);
-        canvas.drawCircle(Offset(railRect.center.dx, railRect.bottom - 3), 2.4, cap);
+        canvas.drawCircle(
+          Offset(railRect.center.dx, railRect.top + 3),
+          2.4,
+          cap,
+        );
+        canvas.drawCircle(
+          Offset(railRect.center.dx, railRect.bottom - 3),
+          2.4,
+          cap,
+        );
         for (var i = 1; i <= 3; i++) {
           final y = railRect.top + railRect.height * i / 4;
           canvas.drawCircle(Offset(railRect.center.dx, y), 1.5, dots);
         }
       } else {
-        canvas.drawCircle(Offset(railRect.left + 3, railRect.center.dy), 2.4, cap);
-        canvas.drawCircle(Offset(railRect.right - 3, railRect.center.dy), 2.4, cap);
+        canvas.drawCircle(
+          Offset(railRect.left + 3, railRect.center.dy),
+          2.4,
+          cap,
+        );
+        canvas.drawCircle(
+          Offset(railRect.right - 3, railRect.center.dy),
+          2.4,
+          cap,
+        );
         for (var i = 1; i <= 3; i++) {
           final x = railRect.left + railRect.width * i / 4;
           canvas.drawCircle(Offset(x, railRect.center.dy), 1.5, dots);
@@ -1249,7 +1516,10 @@ class ScenePainter extends CustomPainter {
       // The barrier itself grows out of the rail as solidity rises. This reads
       // as a machine charging rather than a wall snapping on.
       final rect = view.toScreenRect(gate.collisionRectAt(sim.time));
-      final rr = RRect.fromRectAndRadius(rect, Radius.circular(rect.shortestSide * 0.5));
+      final rr = RRect.fromRectAndRadius(
+        rect,
+        Radius.circular(rect.shortestSide * 0.5),
+      );
       canvas.drawRRect(
         rr.inflate(view.px(0.06)),
         Paint()
@@ -1267,7 +1537,10 @@ class ScenePainter extends CustomPainter {
           ).createShader(rect),
       );
       canvas.drawRRect(
-        RRect.fromRectAndRadius(rect.deflate(1), Radius.circular(rect.shortestSide * 0.45)),
+        RRect.fromRectAndRadius(
+          rect.deflate(1),
+          Radius.circular(rect.shortestSide * 0.45),
+        ),
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1
@@ -1308,7 +1581,9 @@ class ScenePainter extends CustomPainter {
         ..strokeCap = StrokeCap.round
         ..color = color.withValues(alpha: 0.9);
       for (var k = 0; k < 2; k++) {
-        final dy = r * (0.32 - k * 0.22) + (settings.reduceMotion ? 0 : sin(sim.visualTime * 3) * r * 0.04);
+        final dy =
+            r * (0.32 - k * 0.22) +
+            (settings.reduceMotion ? 0 : sin(sim.visualTime * 3) * r * 0.04);
         final path = Path()
           ..moveTo(c.dx - r * 0.3, c.dy + dy + r * 0.18)
           ..lineTo(c.dx, c.dy + dy - r * 0.06)
@@ -1341,7 +1616,9 @@ class ScenePainter extends CustomPainter {
     for (var i = 1; i < trail.length; i++) {
       final t = i / (trail.length - 1);
       paint
-        ..color = theme.a.withValues(alpha: (0.025 + t * 0.17) * (0.45 + speedT * 0.55))
+        ..color = theme.a.withValues(
+          alpha: (0.025 + t * 0.17) * (0.45 + speedT * 0.55),
+        )
         ..strokeWidth = max(1.0, view.px(0.018 + 0.125 * t));
       canvas.drawLine(
         view.toScreen(trail[i - 1]),
@@ -1394,6 +1671,7 @@ class ScenePainter extends CustomPainter {
     final c = view.toScreen(sim.ball);
     final r = view.px(_marbleWorldRadius);
     final tiltValue = tilt.value;
+    final skin = skinFor(settings.marbleSkin);
 
     // Keep the aura and contact shadow inside the corridor. The marble's body
     // matches its physics radius exactly, but the glow is wider, so without
@@ -1420,7 +1698,9 @@ class ScenePainter extends CustomPainter {
     // Contact shadow reacts to tilt.
     canvas.drawOval(
       Rect.fromCenter(
-        center: c + Offset(tiltValue.dx * r * 0.7, r * 0.55 + tiltValue.dy * r * 0.4),
+        center:
+            c +
+            Offset(tiltValue.dx * r * 0.7, r * 0.55 + tiltValue.dy * r * 0.4),
         width: r * 1.9,
         height: r * 1.1,
       ),
@@ -1436,7 +1716,7 @@ class ScenePainter extends CustomPainter {
       c,
       r * (1.55 + speedT * 0.30),
       Paint()
-        ..color = theme.a.withValues(alpha: 0.20 + speedT * 0.18)
+        ..color = skin.glow.withValues(alpha: 0.20 + speedT * 0.18)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.8),
     );
     if (speedT > 0.4) {
@@ -1451,7 +1731,8 @@ class ScenePainter extends CustomPainter {
     }
 
     // Glass body.
-    final centerLight = c + Offset(-tiltValue.dx * r * 0.35, -tiltValue.dy * r * 0.35);
+    final centerLight =
+        c + Offset(-tiltValue.dx * r * 0.35, -tiltValue.dy * r * 0.35);
     canvas.drawCircle(
       c,
       r,
@@ -1464,8 +1745,8 @@ class ScenePainter extends CustomPainter {
           radius: 0.95,
           colors: [
             Colors.white,
-            Color.lerp(Colors.white, theme.a, 0.55)!,
-            Color.lerp(theme.a, Colors.black, 0.35)!,
+            Color.lerp(Colors.white, skin.core, 0.55)!,
+            Color.lerp(skin.core, Colors.black, 0.35)!,
           ],
           stops: const [0.0, 0.42, 1.0],
         ).createShader(Rect.fromCircle(center: c, radius: r)),
@@ -1518,7 +1799,9 @@ class ScenePainter extends CustomPainter {
     final phase = sim.rollAngle;
 
     canvas.save();
-    canvas.clipPath(Path()..addOval(Rect.fromCircle(center: c, radius: r * 0.94)));
+    canvas.clipPath(
+      Path()..addOval(Rect.fromCircle(center: c, radius: r * 0.94)),
+    );
     final fleck = Paint()..color = Colors.white.withValues(alpha: 0.20);
     for (var k = 0; k < 2; k++) {
       final angle = phase + k * pi;
@@ -1548,7 +1831,9 @@ class ScenePainter extends CustomPainter {
 
   void _paintBlackout(Canvas canvas, BoardView view, Size size) {
     final c = view.toScreen(sim.ball);
-    final radius = view.px(2.9);
+    // Reveal floods the board with light; otherwise the marble carries a
+    // small pool of visibility.
+    final radius = view.px(sim.revealTimer > 0 ? 12.0 : 2.9);
     final rect = Offset.zero & size;
     canvas.drawRect(
       rect,
@@ -1618,7 +1903,11 @@ class SpiritLevelPainter extends CustomPainter {
       ..strokeWidth = 1
       ..color = Colors.white.withValues(alpha: 0.16);
 
-    canvas.drawCircle(center, radius, Paint()..color = Colors.white.withValues(alpha: 0.025));
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()..color = Colors.white.withValues(alpha: 0.025),
+    );
     canvas.drawCircle(center, radius, ring);
     canvas.drawCircle(center, radius * 0.55, ring);
     canvas.drawLine(

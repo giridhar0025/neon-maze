@@ -76,13 +76,16 @@ beyond a touch fallback.
 | Promise | Where it lives |
 |---|---|
 | Seeded maze generation, solvable by construction | `lib/game/maze.dart`, `lib/game/levels.dart` |
-| Eleven mechanics + 80-level curve | `lib/game/levels.dart`, tested in `test/levels_test.dart` |
+| Eleven mechanics + 800-level curve, critical-path placement | `lib/game/levels.dart`, tested in `test/levels_test.dart` |
 | Circle/AABB physics with sub-stepping | `lib/game/simulation.dart` |
 | Calibrated tilt, dead zone, presets, auto-zero | `lib/game/tilt.dart`, `lib/ui/settings_screen.dart` |
-| Cached neon board + live glass marble | `lib/render/scene_painter.dart` |
+| Cached neon board + live glass marble + power-up auras/skins | `lib/render/scene_painter.dart` |
+| Five in-maze superpowers (Shield, Magnet, Phase, Slow, Reveal) | `lib/game/powerups.dart`, `simulation.dart`, `game_screen.dart` |
+| Looping menu/game/blackout music + SFX | `tool/gen_audio.py`, `lib/core/audio.dart` |
+| Daily challenge, streak, missions, sparks, marble skins | `lib/game/daily.dart`, `lib/data/store.dart`, `ui/home_screen.dart` |
 | Stars, best times, unlocks, resume | `lib/data/store.dart`, `lib/ui/level_select_screen.dart` |
 | Onboarding, pause, win, retry | `lib/ui/game_screen.dart` |
 | Original identity, audio, icon | `tool/gen_audio.py`, `tool/gen_icon.py`, `assets/` |
 
 Deliberate gaps kept for a later release: leaderboards, cloud save, localisation,
-daily challenge, and store listing assets.
+share cards, and final store listing assets.

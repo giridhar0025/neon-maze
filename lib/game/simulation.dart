@@ -3,8 +3,19 @@ import 'dart:math';
 import 'package:flutter/painting.dart';
 
 import 'levels.dart';
+import 'powerups.dart';
 
-enum SimEventType { orb, fall, win, portal, bumper, breakWall }
+enum SimEventType {
+  orb,
+  fall,
+  win,
+  portal,
+  bumper,
+  breakWall,
+  powerUp,
+  powerUpUsed,
+  shieldSave,
+}
 
 class SimEvent {
   const SimEvent(this.type, this.position, [this.strength = 0]);
@@ -26,10 +37,10 @@ class SimEvent {
 ///  * `rollAngle`/`rollDirection` describe the visible rolling of the marble.
 class Simulation {
   Simulation(this.level, {this.ballRadius = 0.19})
-      : wallBoxes = level.maze
-            .wallBoxes(wallThickness)
-            .where((box) => !level.isBreakableBox(box))
-            .toList() {
+    : wallBoxes = level.maze
+          .wallBoxes(wallThickness)
+          .where((box) => !level.isBreakableBox(box))
+          .toList() {
     reset();
   }
 
@@ -46,7 +57,7 @@ class Simulation {
   /// Bumper feel. A post is a rubber spring: it returns more normal speed than
   /// it takes, dampens the sideways component, and always kicks the marble
   /// clear at [bumperMinExit].
-  static const double bumperRestitution = 1.32;
+  static const double bumperRestitution = 1.36;
   static const double bumperGrip = 0.88;
   static const double bumperMinExit = 2.2;
 
@@ -70,6 +81,29 @@ class Simulation {
 
   final Set<int> collected = <int>{};
   final List<SimEvent> events = <SimEvent>[];
+
+  /// Superpowers currently in the player's belt, in pickup order.
+  final List<PowerUpType> belt = <PowerUpType>[];
+
+  /// Pickups already taken this run.
+  final Set<int> collectedPowerUps = <int>{};
+
+  double magnetTimer = 0;
+  double phaseTimer = 0;
+  double slowTimer = 0;
+  double revealTimer = 0;
+  int shieldCharges = 0;
+
+  /// Grace window after a shield save, so the marble cannot immediately fall
+  /// back into the same hole.
+  double shieldGrace = 0;
+
+  /// Hazard clocks advance slower while a Slow Field is active. Gate and
+  /// slider positions use this clock, not the real one.
+  double hazardTime = 0;
+
+  Offset _lastSafe = Offset.zero;
+  double _safeClock = 0;
 
   /// Per-bumper freshness of the last hit (1 = just hit, 0 = settled). Render
   /// only: it drives the flash and spring compression so a hit is visible even
@@ -111,6 +145,17 @@ class Simulation {
     fell = false;
     won = false;
     collected.clear();
+    collectedPowerUps.clear();
+    belt.clear();
+    magnetTimer = 0;
+    phaseTimer = 0;
+    slowTimer = 0;
+    revealTimer = 0;
+    shieldCharges = 0;
+    shieldGrace = 0;
+    hazardTime = 0;
+    _lastSafe = level.start;
+    _safeClock = 0;
     events.clear();
     for (final wall in level.breakables) {
       wall.broken = false;
@@ -158,9 +203,24 @@ class Simulation {
 
   void _stepFixed(double h, Offset tilt) {
     time += h;
+    // Moving hazards run on hazardTime: a Slow Field makes gates and sliders
+    // crawl without changing the marble's own physics or the run timer.
+    hazardTime += h * (slowTimer > 0 ? 0.42 : 1.0);
     portalCooldown = max(0, portalCooldown - h);
     invulnerable = max(0, invulnerable - h);
+    magnetTimer = max(0, magnetTimer - h);
+    phaseTimer = max(0, phaseTimer - h);
+    slowTimer = max(0, slowTimer - h);
+    revealTimer = max(0, revealTimer - h);
+    shieldGrace = max(0, shieldGrace - h);
     _bumperCooldown = max(0, _bumperCooldown - h);
+    _safeClock += h;
+    // Remember a recent spot that is clear of every hole. A shield save puts
+    // the marble back here instead of all the way at the start.
+    if (_safeClock > 0.25 && _holeClearance() > 1.05 && speed < 4.5) {
+      _lastSafe = ball;
+      _safeClock = 0;
+    }
     // A hit flash fades over roughly a quarter second.
     for (var i = 0; i < bumperFlash.length; i++) {
       if (bumperFlash[i] > 0) bumperFlash[i] = max(0, bumperFlash[i] - h * 4);
@@ -207,6 +267,19 @@ class Simulation {
   }
 
   void _applyFields(double h) {
+    // Magnet: a short-range tractor beam that bends loose orbs toward the
+    // marble. It is deliberately not a global vacuum; the player still has to
+    // get within a couple of cells.
+    if (magnetTimer > 0) {
+      for (var i = 0; i < level.orbs.length; i++) {
+        if (collected.contains(i)) continue;
+        final delta = ball - level.orbs[i].center;
+        final distance = delta.distance;
+        if (distance > 2.0 || distance < 1e-4) continue;
+        final pull = (1 - distance / 2.0);
+        velocity += (-delta / distance) * (9.0 * pull * h);
+      }
+    }
     for (final conveyor in level.conveyors) {
       if (conveyor.rect.contains(ball)) {
         velocity += conveyor.direction * (conveyor.strength * h);
@@ -218,17 +291,18 @@ class Simulation {
       if (distance >= magnet.radius || distance < 1e-4) continue;
       final falloff = 1 - distance / magnet.radius;
       final sign = magnet.attract ? 1.0 : -1.0;
-      velocity += (delta / distance) * (magnet.strength * falloff * falloff * sign * h);
+      velocity +=
+          (delta / distance) * (magnet.strength * falloff * falloff * sign * h);
     }
     // Holes pull before they kill, so the failure reads as a smooth slide into
     // the drop instead of an instant teleport.
     for (final hole in level.holes) {
       final delta = hole.center - ball;
       final distance = delta.distance;
-      final influence = hole.radius * 1.75;
+      final influence = hole.radius * 1.90;
       if (distance >= influence || distance < 1e-4) continue;
       final falloff = 1 - distance / influence;
-      velocity += (delta / distance) * (5.5 * falloff * falloff * h);
+      velocity += (delta / distance) * (6.2 * falloff * falloff * h);
     }
   }
 
@@ -242,50 +316,61 @@ class Simulation {
   }
 
   void _resolveGates(double h) {
+    if (phaseTimer > 0) return;
     for (final gate in level.gates) {
-      final solid = gate.solidity(time);
+      final solid = gate.solidity(hazardTime);
       if (solid <= 0.02) continue;
-      final rect = gate.collisionRectAt(time);
+      final rect = gate.collisionRectAt(hazardTime);
       _resolveBox(rect, restitution: 0.45, tangentialLoss: 0.03);
       if (!rect.inflate(ballRadius).contains(ball)) continue;
       // A moving gate carries the marble a little.
-      final c0 = gate.collisionRectAt(time - h).center;
-      final c1 = gate.collisionRectAt(time).center;
+      final c0 = gate
+          .collisionRectAt(hazardTime - h * (slowTimer > 0 ? 0.42 : 1.0))
+          .center;
+      final c1 = gate.collisionRectAt(hazardTime).center;
       final gateVelocity = (c1 - c0) / max(h, 1e-4);
-      velocity += gateVelocity * 0.18;
+      velocity += gateVelocity * 0.24;
     }
   }
 
   /// Short sliding walls with a moving gap. They are always solid, and the
   /// moving surface gives the marble a small carry when it is touched.
   void _resolveSliders(double h) {
+    if (phaseTimer > 0) return;
     for (final slider in level.sliders) {
-      final rect = slider.rectAt(time);
+      final rect = slider.rectAt(hazardTime);
       _resolveBox(rect, restitution: 0.38, tangentialLoss: 0.02);
       if (!rect.inflate(ballRadius).contains(ball)) continue;
-      final c0 = slider.rectAt(time - h).center;
-      final c1 = slider.rectAt(time).center;
+      final c0 = slider
+          .rectAt(hazardTime - h * (slowTimer > 0 ? 0.42 : 1.0))
+          .center;
+      final c1 = slider.rectAt(hazardTime).center;
       final slideVelocity = (c1 - c0) / max(h, 1e-4);
-      velocity += slideVelocity * 0.22;
+      velocity += slideVelocity * 0.28;
     }
   }
 
   /// One-way membranes are only solid while the marble is not travelling with
   /// the arrows. That keeps the intended route open and blocks the reverse.
   void _resolveFlowPanels() {
+    if (phaseTimer > 0) return;
     for (final panel in level.flowPanels) {
-      final along = velocity.dx * panel.direction.dx +
-          velocity.dy * panel.direction.dy;
+      final along =
+          velocity.dx * panel.direction.dx + velocity.dy * panel.direction.dy;
       final near = (ball - panel.rect.center).distance;
       if (along > 0.0) {
         // A small forward assist makes a correctly entered flow feel like a
         // current instead of a patch of floor.
-        if (near < 0.55) velocity += panel.direction * (1.1 * Simulation.fixedStep);
+        if (near < 0.55) {
+          velocity += panel.direction * (1.1 * Simulation.fixedStep);
+        }
         continue;
       }
       // Approaching against the arrows: nudge with the current first, then
       // resolve the membrane, so the stop is less abrupt.
-      if (near < 0.5) velocity += panel.direction * (1.8 * Simulation.fixedStep);
+      if (near < 0.5) {
+        velocity += panel.direction * (1.8 * Simulation.fixedStep);
+      }
       _resolveBox(panel.rect, restitution: 0.42, tangentialLoss: 0.02);
     }
   }
@@ -428,19 +513,49 @@ class Simulation {
     for (final h in level.holes) {
       // A wider capture radius: clipping the rim of a hole now drops the
       // marble instead of letting it skate past.
-      if ((ball - h.center).distance < h.radius * 0.88) {
+      if (shieldGrace > 0) continue;
+      if ((ball - h.center).distance < h.radius * 0.92) {
+        if (shieldCharges > 0) {
+          shieldCharges--;
+          ball = _lastSafe;
+          velocity = Offset.zero;
+          shieldGrace = 1.25;
+          events.add(SimEvent(SimEventType.shieldSave, h.center, 1));
+          return;
+        }
         fell = true;
         events.add(SimEvent(SimEventType.fall, ball, 1));
         return;
       }
     }
 
+    final pickupRadius = orbPickupRadius;
     for (var i = 0; i < level.orbs.length; i++) {
       if (collected.contains(i)) continue;
       final orb = level.orbs[i];
-      if ((ball - orb.center).distance < orb.radius + ballRadius * 0.55) {
+      if ((ball - orb.center).distance < pickupRadius) {
         collected.add(i);
         events.add(SimEvent(SimEventType.orb, orb.center, 1));
+      }
+    }
+
+    for (var i = 0; i < level.powerUps.length; i++) {
+      if (collectedPowerUps.contains(i)) continue;
+      final pickup = level.powerUps[i];
+      if ((ball - pickup.center).distance <
+          kPowerUpRadius + ballRadius * 0.65) {
+        // Full belt: leave the pickup on the board. A player who has planned
+        // their three slots should not lose a power-up to a drive-by.
+        if (belt.length >= kPowerUpBeltSize) continue;
+        collectedPowerUps.add(i);
+        belt.add(pickup.type);
+        events.add(
+          SimEvent(
+            SimEventType.powerUp,
+            pickup.center,
+            pickup.type.index.toDouble(),
+          ),
+        );
       }
     }
 
@@ -463,6 +578,51 @@ class Simulation {
       won = true;
       events.add(SimEvent(SimEventType.win, level.exit, 1));
     }
+  }
+
+  double get orbPickupRadius =>
+      0.13 + ballRadius * 0.55 + (magnetTimer > 0 ? 1.15 : 0.0);
+
+  bool get hasActiveEffect =>
+      magnetTimer > 0 ||
+      phaseTimer > 0 ||
+      slowTimer > 0 ||
+      revealTimer > 0 ||
+      shieldCharges > 0;
+
+  /// Removes a power-up from the belt and applies it. Returns the type that
+  /// was spent, or null when the slot is empty.
+  PowerUpType? activatePowerUp(int index) {
+    if (index < 0 || index >= belt.length) return null;
+    final type = belt.removeAt(index);
+    switch (type) {
+      case PowerUpType.shield:
+        shieldCharges = min(3, shieldCharges + 1);
+        break;
+      case PowerUpType.magnet:
+        magnetTimer = max(magnetTimer, 6);
+        break;
+      case PowerUpType.phase:
+        phaseTimer = max(phaseTimer, 5);
+        break;
+      case PowerUpType.slow:
+        slowTimer = max(slowTimer, 6);
+        break;
+      case PowerUpType.reveal:
+        revealTimer = max(revealTimer, 8);
+        break;
+    }
+    events.add(SimEvent(SimEventType.powerUpUsed, ball, type.index.toDouble()));
+    return type;
+  }
+
+  double _holeClearance() {
+    var best = double.infinity;
+    for (final hole in level.holes) {
+      final clearance = (ball - hole.center).distance - hole.radius;
+      if (clearance < best) best = clearance;
+    }
+    return best;
   }
 
   void _teleport(Offset target) {

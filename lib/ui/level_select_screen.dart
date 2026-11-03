@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/audio.dart';
 import '../core/haptics.dart';
 import '../data/store.dart';
 import '../game/levels.dart';
@@ -25,6 +28,7 @@ class _LevelSelectScreenState extends State<LevelSelectScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(Music.instance.play(MusicTrack.menu));
     final current = widget.store.continueLevelId ~/ LevelCatalog.levelsPerChapter;
     _chapter = current.clamp(0, LevelCatalog.chapterCount - 1);
   }
@@ -316,7 +320,10 @@ class _ChapterCard extends StatelessWidget {
                 Icon(Icons.check_circle_rounded,
                     size: 11, color: selected ? theme.a : AppColors.inkFaint),
                 const SizedBox(width: 4),
-                Text('$cleared/10', style: AppText.body(10, color: AppColors.inkFaint)),
+                Text(
+                  '$cleared/${LevelCatalog.levelsPerChapter}',
+                  style: AppText.body(10, color: AppColors.inkFaint),
+                ),
               ],
             ),
           ],

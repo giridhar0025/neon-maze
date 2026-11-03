@@ -34,16 +34,25 @@ class NeonButton extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (icon != null) ...[
-          Icon(icon, size: compact ? 17 : 20, color: primary ? AppColors.bg : AppColors.ink),
-          const SizedBox(width: 9),
-        ],
-        Text(
-          label,
-          style: AppText.body(
-            compact ? 14 : 16,
-            weight: 700,
+          Icon(
+            icon,
+            size: compact ? 15 : 20,
             color: primary ? AppColors.bg : AppColors.ink,
-            letterSpacing: 0.2,
+          ),
+          SizedBox(width: compact ? 6 : 9),
+        ],
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: AppText.body(
+              compact ? 12.5 : 16,
+              weight: 700,
+              color: primary ? AppColors.bg : AppColors.ink,
+              letterSpacing: 0.2,
+            ),
           ),
         ),
       ],
@@ -80,7 +89,9 @@ class NeonButton extends StatelessWidget {
                     )
                   : null,
               border: Border.all(
-                color: primary ? Colors.transparent : Colors.white.withValues(alpha: 0.14),
+                color: primary
+                    ? Colors.transparent
+                    : Colors.white.withValues(alpha: 0.14),
               ),
               color: primary ? null : Colors.white.withValues(alpha: 0.03),
             ),
@@ -181,7 +192,9 @@ class StarRow extends StatelessWidget {
               size: size,
               color: i < stars
                   ? AppColors.gold
-                  : (dim ? Colors.white.withValues(alpha: 0.14) : Colors.white.withValues(alpha: 0.22)),
+                  : (dim
+                        ? Colors.white.withValues(alpha: 0.14)
+                        : Colors.white.withValues(alpha: 0.22)),
               shadows: i < stars
                   ? [
                       Shadow(
@@ -227,7 +240,12 @@ class Pill extends StatelessWidget {
           ],
           Text(
             label,
-            style: AppText.body(11, weight: 600, color: color, letterSpacing: 0.4),
+            style: AppText.body(
+              11,
+              weight: 600,
+              color: color,
+              letterSpacing: 0.4,
+            ),
           ),
         ],
       ),
@@ -250,6 +268,197 @@ class SectionLabel extends StatelessWidget {
   }
 }
 
+/// Compact neon-maze brand mark used in navigation chrome.
+///
+/// The launcher art is drawn in normalised coordinates so the in-app mark
+/// reads as the same identity at 32–64 px without shipping a second bitmap.
+class NeonLogoMark extends StatelessWidget {
+  const NeonLogoMark({super.key, this.size = 38, this.radius = 12});
+
+  final double size;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _NeonMarkPainter(radius: radius)),
+    );
+  }
+}
+
+class _NeonMarkPainter extends CustomPainter {
+  _NeonMarkPainter({required this.radius});
+
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
+
+    canvas.save();
+    canvas.clipRRect(rrect);
+
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF122347), Color(0xFF060B18), Color(0xFF0B0718)],
+          stops: [0.0, 0.58, 1.0],
+        ).createShader(rect),
+    );
+
+    // Ambient cyan/violet wash.
+    canvas.drawCircle(
+      Offset(size.width * 0.22, size.height * 0.18),
+      size.width * 0.55,
+      Paint()
+        ..color = AppColors.cyan.withValues(alpha: 0.20)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.22),
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.86, size.height * 0.82),
+      size.width * 0.48,
+      Paint()
+        ..color = AppColors.violet.withValues(alpha: 0.22)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, size.width * 0.22),
+    );
+
+    // The same N mark as the launcher: rounded, axis-aligned maze walls with a
+    // stepped diagonal so it reads as a maze, not a plain glyph.
+    const left = 0.22;
+    const right = 0.78;
+    const top = 0.17;
+    const bottom = 0.83;
+    const steps = 5;
+    final stepX = (right - left) / steps;
+    final stepY = (bottom - top) / steps;
+
+    final path = Path()
+      ..moveTo(size.width * left, size.height * top)
+      ..lineTo(size.width * left, size.height * bottom)
+      ..moveTo(size.width * right, size.height * top)
+      ..lineTo(size.width * right, size.height * bottom);
+    for (var k = 0; k < steps; k++) {
+      final x0 = left + stepX * k;
+      final x1 = left + stepX * (k + 1);
+      final y0 = top + stepY * k;
+      final y1 = top + stepY * (k + 1);
+      path
+        ..moveTo(size.width * x0, size.height * y0)
+        ..lineTo(size.width * x1, size.height * y0)
+        ..lineTo(size.width * x1, size.height * y1);
+    }
+
+    final stroke = size.width * 0.085;
+    final shader = const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        AppColors.cyan,
+        AppColors.blue,
+        AppColors.violet,
+        AppColors.magenta,
+      ],
+      stops: [0.0, 0.35, 0.70, 1.0],
+    ).createShader(rect);
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke * 1.9
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round
+        ..color = AppColors.cyan.withValues(alpha: 0.34)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, stroke * 1.1),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round
+        ..shader = shader,
+    );
+
+    // Mint goal node at the foot of the right arm.
+    final exit = Offset(size.width * right, size.height * bottom);
+    final exitR = size.width * 0.048;
+    canvas.drawCircle(
+      exit,
+      exitR * 1.9,
+      Paint()
+        ..color = AppColors.mint.withValues(alpha: 0.35)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, exitR * 1.6),
+    );
+    canvas.drawCircle(
+      exit,
+      exitR,
+      Paint()..color = AppColors.mint.withValues(alpha: 0.22),
+    );
+    canvas.drawCircle(
+      exit,
+      exitR,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = size.width * 0.012
+        ..color = AppColors.mint,
+    );
+    canvas.drawCircle(exit, exitR * 0.44, Paint()..color = AppColors.mint);
+
+    // Marble.
+    final ball = Offset(size.width * 0.65, size.height * 0.30);
+    final ballR = size.width * 0.078;
+    canvas.drawCircle(
+      ball,
+      ballR * 1.8,
+      Paint()
+        ..color = AppColors.cyan.withValues(alpha: 0.38)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, ballR * 1.1),
+    );
+    canvas.drawCircle(
+      ball,
+      ballR,
+      Paint()
+        ..shader = const RadialGradient(
+          center: Alignment(-0.35, -0.45),
+          radius: 1.0,
+          colors: [
+            Colors.white,
+            Color(0xFFB9FFFA),
+            AppColors.cyan,
+            Color(0xFF0A1830),
+          ],
+          stops: [0.0, 0.32, 0.70, 1.0],
+        ).createShader(Rect.fromCircle(center: ball, radius: ballR)),
+    );
+    canvas.drawCircle(
+      ball + Offset(-ballR * 0.28, -ballR * 0.34),
+      ballR * 0.28,
+      Paint()..color = Colors.white.withValues(alpha: 0.92),
+    );
+
+    canvas.restore();
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = Colors.white.withValues(alpha: 0.16),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _NeonMarkPainter oldDelegate) =>
+      oldDelegate.radius != radius;
+}
+
 /// Decorative glass marble used on the home screen and win sheet.
 class GlowMarble extends StatefulWidget {
   const GlowMarble({
@@ -267,7 +476,8 @@ class GlowMarble extends StatefulWidget {
   State<GlowMarble> createState() => _GlowMarbleState();
 }
 
-class _GlowMarbleState extends State<GlowMarble> with SingleTickerProviderStateMixin {
+class _GlowMarbleState extends State<GlowMarble>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 6),
@@ -296,7 +506,11 @@ class _GlowMarbleState extends State<GlowMarble> with SingleTickerProviderStateM
 }
 
 class _MarblePainter extends CustomPainter {
-  _MarblePainter({required this.t, required this.accent, required this.secondary});
+  _MarblePainter({
+    required this.t,
+    required this.accent,
+    required this.secondary,
+  });
 
   final double t;
   final Color accent;
@@ -387,7 +601,11 @@ class _MarblePainter extends CustomPainter {
 
     // Floor glow.
     canvas.drawOval(
-      Rect.fromCenter(center: c + Offset(0, r * 1.5), width: r * 2.2, height: r * 0.3),
+      Rect.fromCenter(
+        center: c + Offset(0, r * 1.5),
+        width: r * 2.2,
+        height: r * 0.3,
+      ),
       Paint()
         ..color = accent.withValues(alpha: 0.22)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10),
@@ -395,12 +613,17 @@ class _MarblePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _MarblePainter oldDelegate) => oldDelegate.t != t;
+  bool shouldRepaint(covariant _MarblePainter oldDelegate) =>
+      oldDelegate.t != t;
 }
 
 /// Soft moving nebula used behind menus.
 class NebulaBackground extends StatefulWidget {
-  const NebulaBackground({super.key, this.accent = AppColors.cyan, this.secondary = AppColors.magenta});
+  const NebulaBackground({
+    super.key,
+    this.accent = AppColors.cyan,
+    this.secondary = AppColors.magenta,
+  });
 
   final Color accent;
   final Color secondary;
@@ -409,7 +632,8 @@ class NebulaBackground extends StatefulWidget {
   State<NebulaBackground> createState() => _NebulaBackgroundState();
 }
 
-class _NebulaBackgroundState extends State<NebulaBackground> with SingleTickerProviderStateMixin {
+class _NebulaBackgroundState extends State<NebulaBackground>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 18),
@@ -440,7 +664,11 @@ class _NebulaBackgroundState extends State<NebulaBackground> with SingleTickerPr
 }
 
 class _NebulaPainter extends CustomPainter {
-  _NebulaPainter({required this.t, required this.accent, required this.secondary});
+  _NebulaPainter({
+    required this.t,
+    required this.accent,
+    required this.secondary,
+  });
 
   final double t;
   final Color accent;
@@ -471,10 +699,19 @@ class _NebulaPainter extends CustomPainter {
         center,
         size.shortestSide * radius,
         Paint()
-          ..shader = RadialGradient(
-            colors: [color.withValues(alpha: alpha), Colors.transparent],
-            stops: const [0.0, 1.0],
-          ).createShader(Rect.fromCircle(center: center, radius: size.shortestSide * radius)),
+          ..shader =
+              RadialGradient(
+                colors: [
+                  color.withValues(alpha: alpha),
+                  Colors.transparent,
+                ],
+                stops: const [0.0, 1.0],
+              ).createShader(
+                Rect.fromCircle(
+                  center: center,
+                  radius: size.shortestSide * radius,
+                ),
+              ),
       );
     }
 
@@ -492,5 +729,6 @@ class _NebulaPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _NebulaPainter oldDelegate) => oldDelegate.t != t;
+  bool shouldRepaint(covariant _NebulaPainter oldDelegate) =>
+      oldDelegate.t != t;
 }

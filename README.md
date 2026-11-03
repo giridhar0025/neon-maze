@@ -16,11 +16,27 @@ but with an original identity, levels, mechanics, art and audio. No ads, no IAP,
   presets, fine trim, axis inversion and slow posture adaptation.
 - **Touch and keyboard fallback** — drag anywhere or use WASD/arrows on desktop, so the
   game is playable in a browser, on a tablet without a gyro, or in an emulator.
-- **80 generated levels** across eight chapters, each introducing a mechanic:
-  holes, energy orbs, pulse gates, portals, one-way flow panels, conveyor
-  belts, breakable walls, sliding walls, magnets, bumpers and blackout.
-- **Longer routes by construction** — the generator searches seeds for a minimum
-  solution length, so a braided late-game maze cannot collapse into a sprint.
+- **800 generated levels** — eight chapters of one hundred, each split into five
+  20-level acts. Chapters introduce holes, energy orbs, pulse gates, portals,
+  one-way flow panels, conveyor belts, breakable walls, sliding walls, magnets,
+  bumpers, tar detours and blackout.
+- **Readable late-game boards** — grid size is deliberately capped at 14×18, so
+  a phone still draws a ~26 px cell. Difficulty comes from longer routes, tighter
+  par times, act structure and hazard placement, not from shrinking the maze.
+- **Strict critical-path hazards** — junctions, turns, side-branch entrances and
+  the exit approach score highest, so gates, sliders, bumpers, magnets and holes
+  land where the player is actually making a decision. Gates and sliders need a
+  real straight run; belts need a long run with room on both sides; breakables
+  need a large route shortcut; holes keep a clear cell between each other. A
+  route-length hazard budget prevents late boards becoming cluttered.
+- **Testing build opens the catalog** — all 800 levels are unlocked by default
+  while QA is in progress. Ship a locked build with
+  `--dart-define=NM_UNLOCK_ALL=false`.
+- **Five in-maze superpowers** — Shield, Magnet, Phase, Slow Field and Reveal.
+  They sit on optional detours, fill a three-slot belt and are tapped when needed.
+- **Looping music and a daily loop** — synthesized menu/game/blackout tracks,
+  a date-seeded daily challenge with streaks, three daily missions, sparks and
+  cosmetic marble finishes to unlock.
 - **Natural-weight marble physics** — moderate gravity, real rolling resistance and a
   lower speed cap; the marble responds immediately but settles like an object.
 - **Three-star par times**, persistent best times, score multipliers and level unlocking.
@@ -60,6 +76,7 @@ The app accepts `--dart-define` entry points for layout/QA work:
 ```bash
 flutter run -d chrome --dart-define=NM_START=game:12 --dart-define=NM_SKIP_ONBOARDING=true
 # NM_START: home | levels | settings | howto | game:<0-based id>
+# Locked store build (progression enforced): --dart-define=NM_UNLOCK_ALL=false
 ```
 
 ## Tests
@@ -72,7 +89,11 @@ flutter test
 Coverage is focused on the parts that are easy to break silently:
 
 - maze connectivity, wall symmetry, solution validity, farthest-cell goal;
-- every one of the 80 levels builds, orbs/holes stay reachable, mechanics appear;
+- every one of the 800 levels builds, orbs/holes/power-ups stay reachable, all placed mechanics appear,
+  and hazards only land on the critical route with legal spacing;
+- route targets and hazard budgets ramp through the acts, tar never sits on the main route;
+- the testing build opens all 800 levels;
+- daily challenge determinism and the daily mission/streak/skin economy;
 - marble physics: acceleration, no wall tunnelling, orb/exit rules, fall events, reset,
   score ordering, and 20 seconds of randomised input without NaN or escape;
 - unlock/progression/persistence and star/best-time rules;
@@ -83,16 +104,18 @@ Coverage is focused on the parts that are easy to break silently:
 ```
 lib/
   main.dart / app.dart       bootstrap, portrait lock, dev deep links
-  data/store.dart            settings + per-level records, SharedPreferences
+  data/store.dart            settings, records, daily missions, sparks, skins
   game/
     maze.dart                seeded DFS maze, braiding, BFS distances, wall boxes
-    levels.dart              80-level catalog, hazard placement, par times
-    simulation.dart          engine-free circle/AABB physics with sub-stepping
+    levels.dart              800-level catalog, critical-path hazard placement, par times
+    powerups.dart            superpower definitions and pickup model
+    daily.dart               date-seeded daily challenge remix
+    simulation.dart          engine-free circle/AABB physics, power-up effects
     tilt.dart                accelerometer -> calibrated, filtered, scaled tilt
     particles.dart           pooled sparks/bursts
   render/scene_painter.dart  cached static board + live scene + spirit level
   ui/                        home, chapters, game, settings, how-to, shared widgets
-  theme/                     palette, chapter identities, type ramp
+  theme/                     palette, chapter identities, type ramp, marble skins
 tool/                        generator scripts for audio and app icons
 ```
 
@@ -124,14 +147,25 @@ feature decisions are in [`docs/FEATURE-GAP.md`](docs/FEATURE-GAP.md).
 
 No strings, assets, audio, level seeds or code from the original are reused.
 
-## Roadmap
+## Roadmap to a store launch
 
-- Play Games Services leaderboards/achievements (the reference app used them; this build
-  deliberately stays offline until privacy copy exists).
-- Chapter 9–10 mechanics: rotating bars, patrol hazards and breakable floors.
-- Daily seeded challenge with shareable result card.
-- Ambient generative music to match the synthesized SFX.
+Shipped in 1.4.0: 800 levels, critical-path hazard placement, five superpowers,
+looping music, daily challenge + streak, daily missions, sparks, cosmetic marble
+skins, and a readability pass on late boards.
+
+Shipped in 1.5.0 (QA build): stricter obstacle placement and timing, longer routes
+with deeper orb detours, late-game tar detours, a new N-monogram logo built from
+maze walls, adaptive Android icons and a 32 px favicon, and all levels unlocked for testing.
+
+Still recommended before/at launch:
+
+- Play Games Services / Game Center leaderboards and a handful of achievements.
+- iCloud/Google Play cloud save, so a reinstall does not lose 800 levels of progress.
 - Localisation pass (the genre audience is global; strings are currently English).
+- Share card for daily results and chapter milestones.
+- More long-tail events: weekly gauntlet, limited-time marble finishes, chapter chests.
+- Store assets: feature graphic, six screenshots per platform, preview video, privacy
+  policy URL and the App Store/Play data-safety forms.
 
 Publishing steps, store copy and the real-device QA list are in [`docs/RELEASE.md`](docs/RELEASE.md).
 

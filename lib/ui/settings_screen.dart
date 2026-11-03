@@ -177,11 +177,28 @@ class SettingsScreen extends StatelessWidget {
                               children: [
                                 _SwitchTile(
                                   icon: Icons.volume_up_rounded,
-                                  title: 'Sound',
+                                  title: 'Sound effects',
                                   subtitle: 'Impact, pickup and clear effects',
                                   value: settings.sound,
                                   onChanged: (v) => store.updateSettings(settings.copyWith(sound: v)),
                                 ),
+                                _SwitchTile(
+                                  icon: Icons.music_note_rounded,
+                                  title: 'Music',
+                                  subtitle: 'Looping synth soundtrack',
+                                  value: settings.music,
+                                  onChanged: (v) => store.updateSettings(settings.copyWith(music: v)),
+                                ),
+                                if (settings.music)
+                                  _SliderTile(
+                                    label: 'Music volume',
+                                    value: settings.musicVolume,
+                                    min: 0,
+                                    max: 1,
+                                    display: '${(settings.musicVolume * 100).round()}%',
+                                    onChanged: (v) =>
+                                        store.updateSettings(settings.copyWith(musicVolume: v)),
+                                  ),
                                 _SwitchTile(
                                   icon: Icons.vibration_rounded,
                                   title: 'Haptics',

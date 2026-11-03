@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neon_maze/game/levels.dart';
 import 'package:neon_maze/game/maze.dart';
+import 'package:neon_maze/game/powerups.dart';
 import 'package:neon_maze/game/simulation.dart' as game;
 
 void main() {
@@ -28,8 +29,14 @@ void main() {
       sim.step(1 / 60, const Offset(-1, 0));
       expect(sim.ball.dx, greaterThanOrEqualTo(sim.ballRadius - 0.02));
       expect(sim.ball.dy, greaterThanOrEqualTo(sim.ballRadius - 0.02));
-      expect(sim.ball.dx, lessThanOrEqualTo(level.maze.cols - sim.ballRadius + 0.02));
-      expect(sim.ball.dy, lessThanOrEqualTo(level.maze.rows - sim.ballRadius + 0.02));
+      expect(
+        sim.ball.dx,
+        lessThanOrEqualTo(level.maze.cols - sim.ballRadius + 0.02),
+      );
+      expect(
+        sim.ball.dy,
+        lessThanOrEqualTo(level.maze.rows - sim.ballRadius + 0.02),
+      );
     }
   });
 
@@ -45,7 +52,11 @@ void main() {
 
     sim.ball = level.exit;
     sim.step(1 / 60, Offset.zero);
-    expect(sim.won, isFalse, reason: 'exit must stay locked with orbs remaining');
+    expect(
+      sim.won,
+      isFalse,
+      reason: 'exit must stay locked with orbs remaining',
+    );
 
     for (var i = 0; i < level.orbs.length; i++) {
       sim.collected.add(i);
@@ -53,7 +64,10 @@ void main() {
     sim.ball = level.exit;
     sim.step(1 / 60, Offset.zero);
     expect(sim.won, isTrue);
-    expect(sim.drainEvents().any((e) => e.type == game.SimEventType.win), isTrue);
+    expect(
+      sim.drainEvents().any((e) => e.type == game.SimEventType.win),
+      isTrue,
+    );
   });
 
   test('crossing a hole ends the run and emits a fall event', () {
@@ -63,7 +77,10 @@ void main() {
     sim.ball = level.holes.first.center;
     sim.step(1 / 60, Offset.zero);
     expect(sim.fell, isTrue);
-    expect(sim.drainEvents().any((e) => e.type == game.SimEventType.fall), isTrue);
+    expect(
+      sim.drainEvents().any((e) => e.type == game.SimEventType.fall),
+      isTrue,
+    );
   });
 
   test('pulse gates alternate between solid and passable', () {
@@ -77,6 +94,33 @@ void main() {
     final states = [for (var i = 0; i < 160; i++) gate.isActive(i / 40)];
     expect(states.where((active) => active).length, greaterThan(20));
     expect(states.where((active) => !active).length, greaterThan(20));
+  });
+
+  test('tuned sliders, belts and magnets stay physically passable', () {
+    final level = LevelRuntime.build(LevelCatalog.byId(799));
+    final sim = game.Simulation(level);
+
+    for (final slider in level.sliders) {
+      // At an extreme the bar leaves a clear gap on one side of the corridor.
+      final gap =
+          0.5 -
+          game.Simulation.wallThickness / 2 +
+          slider.amplitude -
+          slider.halfLong;
+      expect(
+        gap,
+        greaterThan(2 * sim.ballRadius),
+        reason: 'slider gap is narrower than the marble',
+      );
+    }
+
+    for (final belt in level.conveyors) {
+      // A full tilt must always be able to beat a belt and a magnet.
+      expect(belt.strength, lessThan(game.Simulation.gravity));
+    }
+    for (final magnet in level.magnets) {
+      expect(magnet.strength, lessThan(game.Simulation.gravity));
+    }
   });
 
   test('fixed timestep is independent of frame rate', () {
@@ -126,17 +170,26 @@ void main() {
       sim.step(1 / 60, const Offset(0, -1));
     }
 
-    expect(sim.speed, greaterThan(1.8),
-        reason: 'wall sliding should not scrub off most of the speed');
+    expect(
+      sim.speed,
+      greaterThan(1.8),
+      reason: 'wall sliding should not scrub off most of the speed',
+    );
   });
 
   test('the marble settles when the board is level and still', () {
-    final level = LevelRuntime.build(LevelCatalog.byId(0));
+    final level = LevelCatalog.all
+        .map(LevelRuntime.build)
+        .firstWhere(
+          (runtime) => runtime.holes.every(
+            (hole) => (hole.center - runtime.start).distance > 2.5,
+          ),
+        );
     final sim = game.Simulation(level);
     sim.ball = level.start;
     sim.velocity = const Offset(0.35, 0);
 
-    for (var i = 0; i < 120; i++) {
+    for (var i = 0; i < 600; i++) {
       sim.step(1 / 60, Offset.zero);
     }
 
@@ -180,6 +233,84 @@ void main() {
     final hard = sim.score(10_000, 1.35);
     expect(fast, greaterThan(slow));
     expect(hard, greaterThan(fast));
+  });
+
+  test('power-up pickups fill the belt and can be activated', () {
+    final level = LevelCatalog.all
+        .map(LevelRuntime.build)
+        .firstWhere((runtime) => runtime.powerUps.isNotEmpty);
+    final sim = game.Simulation(level);
+    final pickup = level.powerUps.first;
+
+    sim.ball = pickup.center;
+    sim.velocity = Offset.zero;
+    sim.step(1 / 60, Offset.zero);
+
+    expect(sim.belt.length, 1);
+    expect(sim.belt.first, pickup.type);
+    expect(sim.collectedPowerUps, contains(0));
+    expect(
+      sim.drainEvents().any((e) => e.type == game.SimEventType.powerUp),
+      isTrue,
+    );
+
+    final activated = sim.activatePowerUp(0);
+    expect(activated, pickup.type);
+    expect(sim.belt, isEmpty);
+    expect(sim.hasActiveEffect, isTrue);
+    expect(
+      sim.drainEvents().any((e) => e.type == game.SimEventType.powerUpUsed),
+      isTrue,
+    );
+  });
+
+  test('shield absorbs a fall and returns the marble to safety', () {
+    final level = LevelRuntime.build(LevelCatalog.byId(3));
+    final sim = game.Simulation(level);
+    sim.shieldCharges = 1;
+    sim.ball = level.holes.first.center;
+    sim.velocity = Offset.zero;
+
+    sim.step(1 / 60, Offset.zero);
+
+    expect(sim.fell, isFalse);
+    expect(sim.shieldCharges, 0);
+    expect(sim.ball, level.start);
+    expect(
+      sim.drainEvents().any((e) => e.type == game.SimEventType.shieldSave),
+      isTrue,
+    );
+  });
+
+  test('slow field slows the hazard clock, not the run timer', () {
+    final level = LevelRuntime.build(LevelCatalog.byId(300));
+    final sim = game.Simulation(level);
+    sim.belt.add(PowerUpType.slow);
+    sim.activatePowerUp(0);
+    expect(sim.slowTimer, greaterThan(5));
+
+    for (var i = 0; i < 60; i++) {
+      sim.step(1 / 60, Offset.zero);
+    }
+    expect(sim.time, closeTo(1.0, 0.05));
+    expect(sim.hazardTime, lessThan(0.6));
+  });
+
+  test('reset clears power-ups and active effects', () {
+    final level = LevelCatalog.all
+        .map(LevelRuntime.build)
+        .firstWhere((runtime) => runtime.powerUps.isNotEmpty);
+    final sim = game.Simulation(level);
+    sim.belt.add(PowerUpType.magnet);
+    sim.activatePowerUp(0);
+    sim.shieldCharges = 2;
+    sim.reset();
+
+    expect(sim.belt, isEmpty);
+    expect(sim.shieldCharges, 0);
+    expect(sim.magnetTimer, 0);
+    expect(sim.collectedPowerUps, isEmpty);
+    expect(sim.hazardTime, 0);
   });
 
   test('simulation stays finite over a long random-ish run', () {

@@ -10,6 +10,7 @@ import '../core/haptics.dart';
 import '../data/store.dart';
 import '../game/levels.dart';
 import '../game/particles.dart';
+import '../game/powerups.dart';
 import '../game/simulation.dart';
 import '../game/tilt.dart';
 import '../render/scene_painter.dart';
@@ -23,10 +24,19 @@ import 'widgets.dart';
 enum GamePhase { onboarding, countdown, playing, paused, won, fallen }
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, required this.levelId, required this.store});
+  const GameScreen({
+    super.key,
+    required this.levelId,
+    required this.store,
+    this.specOverride,
+  });
 
   final int levelId;
   final AppStore store;
+
+  /// Used by the daily challenge, which is generated from the date instead of
+  /// the campaign catalog.
+  final LevelSpec? specOverride;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -38,17 +48,22 @@ class _GameResult {
     required this.stars,
     required this.score,
     required this.isBest,
+    required this.sparksEarned,
+    required this.isDaily,
   });
 
   final int timeMs;
   final int stars;
   final int score;
   final bool isBest;
+  final int sparksEarned;
+  final bool isDaily;
 }
 
 class _GameScreenState extends State<GameScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  late final LevelSpec _spec = LevelCatalog.byId(widget.levelId);
+  late final LevelSpec _spec =
+      widget.specOverride ?? LevelCatalog.byId(widget.levelId);
   late final LevelRuntime _level = LevelRuntime.build(_spec);
   late final ChapterTheme _theme = ChapterTheme.of(_spec.chapter);
   late final Simulation _sim = Simulation(_level);
@@ -78,13 +93,21 @@ class _GameScreenState extends State<GameScreen>
   Offset _drag = Offset.zero;
   final Set<LogicalKeyboardKey> _keys = <LogicalKeyboardKey>{};
   bool _attemptRecorded = false;
+  int _powerUpsUsed = 0;
+  bool _handoffToGame = false;
+  bool _completing = false;
+
+  bool get _isDaily => _spec.id < 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     unawaited(_sfx.init());
-    unawaited(widget.store.setLastLevel(_spec.id));
+    if (_spec.id >= 0) unawaited(widget.store.setLastLevel(_spec.id));
+    unawaited(Music.instance.play(
+      _spec.blackout ? MusicTrack.blackout : MusicTrack.gameplay,
+    ));
     _phase = widget.store.tutorialSeen ? GamePhase.countdown : GamePhase.onboarding;
     _ticker = createTicker(_onTick)..start();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -102,6 +125,9 @@ class _GameScreenState extends State<GameScreen>
     _sfx.dispose();
     _bannerTimer?.cancel();
     _banner.dispose();
+    if (!_handoffToGame) {
+      unawaited(Music.instance.play(MusicTrack.menu));
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -114,8 +140,15 @@ class _GameScreenState extends State<GameScreen>
       _keys.clear();
       _drag = Offset.zero;
       _tilt.feedFallback(Offset.zero);
+      unawaited(Music.instance.pause());
       if (_phase == GamePhase.playing) {
         setState(() => _phase = GamePhase.paused);
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (_phase == GamePhase.playing) {
+        unawaited(Music.instance.resume());
+      } else {
+        unawaited(Music.instance.pause());
       }
     }
   }
@@ -223,10 +256,31 @@ class _GameScreenState extends State<GameScreen>
           _haptics.bump(3.0);
           _sfx.play(SfxNames.bump, volume: 0.5);
           _particles.burst(event.position, _theme.b, count: 10, speed: 2.6, streak: true);
+        case SimEventType.powerUp:
+          final type = PowerUpType.values[event.strength.round().clamp(0, PowerUpType.values.length - 1)];
+          _haptics.orb();
+          _sfx.play(SfxNames.powerUp, volume: 0.8);
+          _particles.burst(event.position, type.def.color, count: 22, speed: 2.8);
+          _showBanner('${type.def.shortName} READY  ·  TAP TO USE', accent: type.def.color);
+          _hud.value++;
+        case SimEventType.powerUpUsed:
+          final type = PowerUpType.values[event.strength.round().clamp(0, PowerUpType.values.length - 1)];
+          _haptics.bump(3.4);
+          _sfx.play(SfxNames.mission, volume: 0.65);
+          _particles.burst(_sim.ball, type.def.color, count: 20, speed: 2.2, streak: true);
+          _showBanner('${type.def.shortName} ACTIVE', accent: type.def.color);
+          _hud.value++;
+        case SimEventType.shieldSave:
+          _haptics.win();
+          _sfx.play(SfxNames.shield, volume: 0.9);
+          _particles.burst(event.position, AppColors.mint, count: 30, speed: 3.2);
+          _particles.burst(_sim.ball, AppColors.mint, count: 20, speed: 2.2);
+          _showBanner('SHIELD SAVED YOU', accent: AppColors.mint);
+          _hud.value++;
         case SimEventType.fall:
           _startFall();
         case SimEventType.win:
-          _completeLevel();
+          unawaited(_completeLevel());
       }
     }
   }
@@ -236,7 +290,7 @@ class _GameScreenState extends State<GameScreen>
     _haptics.fall();
     _sfx.play(SfxNames.fall, volume: 0.7);
     _particles.burst(_sim.ball, AppColors.danger, count: 26, speed: 3.0, streak: true);
-    if (!_attemptRecorded) {
+    if (!_attemptRecorded && !_isDaily) {
       _attemptRecorded = true;
       unawaited(widget.store.recordAttempt(_spec.id));
     }
@@ -254,22 +308,45 @@ class _GameScreenState extends State<GameScreen>
     setState(() => _phase = GamePhase.countdown);
   }
 
-  void _completeLevel() {
-    if (_phase != GamePhase.playing) return;
+  Future<void> _completeLevel() async {
+    if (_phase != GamePhase.playing || _completing) return;
+    _completing = true;
     final timeMs = _elapsedMs.round();
     final stars = _spec.starsFor(timeMs);
     final score = _sim.score(timeMs, widget.store.settings.scoreMultiplier);
-    final previousBest = widget.store.bestMsFor(_spec.id);
-    final isBest = previousBest == 0 || timeMs < previousBest;
-    _result = _GameResult(timeMs: timeMs, stars: stars, score: score, isBest: isBest);
+    var sparksEarned = 0;
+    late final bool isBest;
+    if (_isDaily) {
+      final previousBest = widget.store.dailyBestMs;
+      isBest = previousBest == 0 || timeMs < previousBest;
+      sparksEarned = await widget.store.completeDaily(timeMs, stars: stars);
+    } else {
+      final previousBest = widget.store.bestMsFor(_spec.id);
+      isBest = previousBest == 0 || timeMs < previousBest;
+      await widget.store.recordWin(
+        _spec.id,
+        stars,
+        timeMs,
+        orbs: _level.orbs.length,
+        powerUpsUsed: _powerUpsUsed,
+      );
+      await widget.store.setLastLevel(
+        (_spec.id + 1).clamp(0, LevelCatalog.total - 1),
+      );
+    }
+    if (!mounted) return;
+    _result = _GameResult(
+      timeMs: timeMs,
+      stars: stars,
+      score: score,
+      isBest: isBest,
+      sparksEarned: sparksEarned,
+      isDaily: _isDaily,
+    );
     _haptics.win();
     _sfx.play(SfxNames.clear, volume: 0.8);
     _particles.burst(_level.exit, AppColors.mint, count: 34, speed: 3.2);
     _particles.burst(_sim.ball, _theme.a, count: 22, speed: 2.6);
-    unawaited(widget.store.recordWin(_spec.id, stars, timeMs));
-    unawaited(widget.store.setLastLevel(
-      (_spec.id + 1).clamp(0, LevelCatalog.total - 1),
-    ));
     setState(() => _phase = GamePhase.won);
   }
 
@@ -279,6 +356,8 @@ class _GameScreenState extends State<GameScreen>
     _elapsedMs = 0;
     _result = null;
     _attemptRecorded = false;
+    _completing = false;
+    _powerUpsUsed = 0;
     _countdownLeft = 3.2;
     _countdown.value = 3;
     _hud.value++;
@@ -305,6 +384,12 @@ class _GameScreenState extends State<GameScreen>
     setState(() => _phase = GamePhase.countdown);
   }
 
+  void _activatePowerUp(int index) {
+    if (_sim.activatePowerUp(index) == null) return;
+    _powerUpsUsed++;
+    _hud.value++;
+  }
+
   void _recalibrate() {
     if (!_tilt.sensorAvailable) {
       _snack('Motion sensor not ready yet.');
@@ -319,8 +404,10 @@ class _GameScreenState extends State<GameScreen>
 
   void _togglePause() {
     if (_phase == GamePhase.playing) {
+      unawaited(Music.instance.pause());
       setState(() => _phase = GamePhase.paused);
     } else if (_phase == GamePhase.paused) {
+      unawaited(Music.instance.resume());
       setState(() => _phase = GamePhase.playing);
     }
   }
@@ -369,6 +456,10 @@ class _GameScreenState extends State<GameScreen>
   }
 
   void _goToChapters() {
+    if (_isDaily) {
+      Navigator.of(context).pop();
+      return;
+    }
     Navigator.of(context).pushAndRemoveUntil(
       neonRoute(LevelSelectScreen(store: widget.store)),
       (route) => route.isFirst,
@@ -376,11 +467,16 @@ class _GameScreenState extends State<GameScreen>
   }
 
   void _nextLevel() {
+    if (_isDaily) {
+      Navigator.of(context).pop();
+      return;
+    }
     final next = _spec.id + 1;
     if (next >= LevelCatalog.total) {
       Navigator.of(context).pop();
       return;
     }
+    _handoffToGame = true;
     Navigator.of(context).pushReplacement(
       neonRoute(GameScreen(levelId: next, store: widget.store)),
     );
@@ -505,6 +601,17 @@ class _GameScreenState extends State<GameScreen>
                 _InfoChip(label: 'PAR ${formatDuration(_spec.parMs)}'),
               ],
             ),
+            if (_level.powerUps.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              ValueListenableBuilder<int>(
+                valueListenable: _hud,
+                builder: (context, _, _) => _PowerUpBar(
+                  sim: _sim,
+                  accent: _theme.a,
+                  onTap: _activatePowerUp,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -628,7 +735,8 @@ class _GameScreenState extends State<GameScreen>
             spec: _spec,
             theme: _theme,
             result: _result!,
-            isChapterEnd: _spec.indexInChapter == LevelCatalog.levelsPerChapter - 1,
+            isChapterEnd: _spec.id >= 0 &&
+                _spec.indexInChapter == LevelCatalog.levelsPerChapter - 1,
             onNext: _nextLevel,
             onReplay: _restart,
             onMap: _goToChapters,
@@ -899,6 +1007,141 @@ class _InfoChip extends StatelessWidget {
   }
 }
 
+class _PowerUpBar extends StatelessWidget {
+  const _PowerUpBar({
+    required this.sim,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final Simulation sim;
+  final Color accent;
+  final void Function(int index) onTap;
+
+  static IconData iconFor(PowerUpType type) => switch (type) {
+        PowerUpType.shield => Icons.shield_rounded,
+        PowerUpType.magnet => Icons.radar_rounded,
+        PowerUpType.phase => Icons.flash_on_rounded,
+        PowerUpType.slow => Icons.hourglass_bottom_rounded,
+        PowerUpType.reveal => Icons.visibility_rounded,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final effects = <(String, Color, double)>[
+      if (sim.shieldCharges > 0)
+        ('SHIELD ×${sim.shieldCharges}', AppColors.mint, 1),
+      if (sim.magnetTimer > 0) ('MAGNET', AppColors.gold, sim.magnetTimer),
+      if (sim.phaseTimer > 0) ('PHASE', AppColors.violet, sim.phaseTimer),
+      if (sim.slowTimer > 0) ('SLOW', AppColors.ice, sim.slowTimer),
+      if (sim.revealTimer > 0) ('REVEAL', AppColors.cyan, sim.revealTimer),
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (effects.isNotEmpty) ...[
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            alignment: WrapAlignment.center,
+            children: [
+              for (final (label, color, timer) in effects)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    color: color.withValues(alpha: 0.12),
+                    border: Border.all(color: color.withValues(alpha: 0.45)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        timer > 1.1 ? label : '$label  ${timer.round()}s',
+                        style: AppText.body(8.5, weight: 700, color: color, letterSpacing: 0.7),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 7),
+        ],
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < kPowerUpBeltSize; i++) ...[
+              if (i > 0) const SizedBox(width: 7),
+              _PowerUpSlot(
+                type: i < sim.belt.length ? sim.belt[i] : null,
+                accent: accent,
+                onTap: i < sim.belt.length ? () => onTap(i) : null,
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _PowerUpSlot extends StatelessWidget {
+  const _PowerUpSlot({required this.type, required this.accent, this.onTap});
+
+  final PowerUpType? type;
+  final Color accent;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = type?.def.color ?? Colors.white.withValues(alpha: 0.20);
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Ink(
+          width: 52,
+          height: 46,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: type == null
+                ? AppColors.bg.withValues(alpha: 0.42)
+                : color.withValues(alpha: 0.14),
+            border: Border.all(
+              color: type == null ? Colors.white.withValues(alpha: 0.10) : color.withValues(alpha: 0.65),
+              width: type == null ? 1 : 1.4,
+            ),
+            boxShadow: type == null
+                ? null
+                : [BoxShadow(color: color.withValues(alpha: 0.18), blurRadius: 12, spreadRadius: -3)],
+          ),
+          child: type == null
+              ? Icon(Icons.add_rounded, size: 16, color: Colors.white.withValues(alpha: 0.12))
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(_PowerUpBar.iconFor(type!), size: 17, color: color),
+                    const SizedBox(height: 2),
+                    Text(
+                      type!.def.shortName,
+                      style: AppText.body(7, weight: 700, color: color, letterSpacing: 0.5),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CountdownOverlay extends StatelessWidget {
   const _CountdownOverlay({required this.countdown, required this.accent, required this.level});
 
@@ -931,7 +1174,9 @@ class _CountdownOverlay extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'LEVEL ${level.number}  ·  ${ChapterTheme.of(level.chapter).name}',
+                    level.id < 0
+                        ? 'DAILY CHALLENGE  ·  ${ChapterTheme.of(level.chapter).name}'
+                        : 'LEVEL ${level.number}  ·  ${ChapterTheme.of(level.chapter).name}',
                     style: AppText.body(11, weight: 600, color: accent, letterSpacing: 2.4),
                   ),
                 ],
@@ -1226,15 +1471,20 @@ class _WinOverlay extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    isChapterEnd
-                        ? 'CHAPTER CLEAR'
-                        : result.isBest
-                            ? 'NEW BEST'
-                            : 'ESCAPED',
+                    result.isDaily
+                        ? 'DAILY COMPLETE'
+                        : isChapterEnd
+                            ? 'CHAPTER CLEAR'
+                            : result.isBest
+                                ? 'NEW BEST'
+                                : 'ESCAPED',
                     style: AppText.display(15, color: theme.a, letterSpacing: 4),
                   ),
                   const SizedBox(height: 6),
-                  Text('LEVEL ${spec.number}', style: AppText.display(46, letterSpacing: 2)),
+                  Text(
+                    result.isDaily ? 'DAILY ${spec.number}' : 'LEVEL ${spec.number}',
+                    style: AppText.display(result.isDaily ? 38 : 46, letterSpacing: 2),
+                  ),
                   if (isChapterEnd) ...[
                     const SizedBox(height: 4),
                     Text(
@@ -1254,6 +1504,21 @@ class _WinOverlay extends StatelessWidget {
                       );
                     },
                   ),
+                  if (result.sparksEarned > 0) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(999),
+                        color: AppColors.gold.withValues(alpha: 0.12),
+                        border: Border.all(color: AppColors.gold.withValues(alpha: 0.45)),
+                      ),
+                      child: Text(
+                        '+${result.sparksEarned} SPARKS',
+                        style: AppText.body(10.5, weight: 700, color: AppColors.gold, letterSpacing: 1.2),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   GlassCard(
                     accent: theme.a,
@@ -1269,11 +1534,13 @@ class _WinOverlay extends StatelessWidget {
                   ),
                   const SizedBox(height: 22),
                   NeonButton(
-                    label: spec.id + 1 >= LevelCatalog.total
-                        ? 'FINISH'
-                        : isChapterEnd
-                            ? 'NEXT CHAPTER'
-                            : 'NEXT LEVEL',
+                    label: result.isDaily
+                        ? 'BACK HOME'
+                        : spec.id + 1 >= LevelCatalog.total
+                            ? 'FINISH'
+                            : isChapterEnd
+                                ? 'NEXT CHAPTER'
+                                : 'NEXT LEVEL',
                     icon: Icons.arrow_forward_rounded,
                     accent: theme.a,
                     onTap: onNext,
