@@ -6,6 +6,14 @@ glass marble through neon mazes, collect energy orbs and escape before par time.
 Inspired by the *ball-in-a-maze* genre (the original reference was PineSoft's `Gyro Maze`),
 but with an original identity, levels, mechanics, art and audio. No ads, no IAP, no network.
 
+## Play it
+
+- **Browser demo:** <https://giridhar0025.github.io/neon-maze/>
+- **Android QA build:** <https://github.com/giridhar0025/neon-maze/releases/tag/v1.5.0>
+
+The Android APK is a debug-signed QA build with all levels unlocked for testing, not a
+Play Store release.
+
 | Home | Chapters | Gameplay | Pause | Settings |
 |---|---|---|---|---|
 | ![Home](docs/screens/home.png) | ![Chapters](docs/screens/chapters.png) | ![Gameplay](docs/screens/gameplay.png) | ![Pause](docs/screens/pause.png) | ![Settings](docs/screens/settings.png) |
